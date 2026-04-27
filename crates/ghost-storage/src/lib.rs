@@ -5,6 +5,10 @@
 //! outbox, inbox_dedup, settings). The DB encryption key is derived from the
 //! user's IdentityKey via HKDF, so unlocking the identity unlocks the DB.
 
+pub mod error;
+
+pub use error::{Result, StorageError};
+
 #[cfg(test)]
 mod smoke_tests {
     #[test]
