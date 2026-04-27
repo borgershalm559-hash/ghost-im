@@ -10,9 +10,10 @@ description = "Ghost wire protocol: MLS group state, sealed-sender envelopes, Ke
 ghost-core     = { path = "../ghost-core" }
 ghost-identity = { path = "../ghost-identity" }
 
-openmls            = { workspace = true }
-openmls_rust_crypto = { workspace = true }
-openmls_traits      = { workspace = true }
+openmls                 = { workspace = true }
+openmls_rust_crypto     = { workspace = true }
+openmls_traits          = { workspace = true }
+openmls_basic_credential = { workspace = true }
 
 ed25519-dalek = { workspace = true }
 x25519-dalek  = { workspace = true }

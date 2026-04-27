@@ -103,6 +103,12 @@ impl DeviceKey {
             .verify(&pubkey_bytes, &self.parent_signature)
             .is_ok()
     }
+
+    /// Expose the 32-byte secret seed of this device key. Trusted internal use only —
+    /// for constructing MLS SignatureKeyPair from existing key material.
+    pub fn secret_bytes(&self) -> [u8; 32] {
+        self.signing.to_bytes()
+    }
 }
 
 impl std::fmt::Debug for DeviceKey {

@@ -45,6 +45,7 @@ keyring = { version = "3.0", default-features = false, features = ["apple-native
 openmls = { version = "0.8", features = ["test-utils"] }
 openmls_rust_crypto = "0.5"
 openmls_traits = "0.5"
+openmls_basic_credential = "0.5"
 
 # Identifiers
 uuid = { version = "1.10", features = ["v7", "serde"] }
