@@ -77,8 +77,7 @@ fn cmd_create(
 }
 
 fn cmd_show(passphrase: Option<String>) -> Result<()> {
-    let identity =
-        Identity::load_default(passphrase.as_deref()).context("load identity")?;
+    let identity = Identity::load_default(passphrase.as_deref()).context("load identity")?;
     let path = identity_file().context("resolve identity path")?;
     let id = identity.ghost_id();
     let fp = Fingerprint::of(&id);
@@ -100,7 +99,10 @@ fn cmd_show(passphrase: Option<String>) -> Result<()> {
     let dk_ok = identity
         .device_key
         .verify_parent(&identity.identity_key.public());
-    println!("  DK signature: {}", if dk_ok { "valid" } else { "INVALID" });
+    println!(
+        "  DK signature: {}",
+        if dk_ok { "valid" } else { "INVALID" }
+    );
     Ok(())
 }
 

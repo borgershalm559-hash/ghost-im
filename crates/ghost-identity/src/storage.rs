@@ -1,7 +1,7 @@
 //! Save/load Identity to/from an encrypted file using header + AEAD.
 
 use crate::crypto::{aead_decrypt, aead_encrypt, derive_key, AeadError, KdfError, SALT_LEN};
-use crate::file_format::{Header, FileFormatError, FILE_FORMAT_VERSION, HEADER_LEN};
+use crate::file_format::{FileFormatError, Header, FILE_FORMAT_VERSION, HEADER_LEN};
 use crate::identity::Identity;
 use rand::RngCore;
 use std::io;
@@ -91,7 +91,10 @@ mod tests {
 
         assert_eq!(loaded.ghost_id(), original_id);
         assert_eq!(loaded.display_name.as_deref(), Some("Alice"));
-        assert_eq!(loaded.one_time_prekeys.len(), original.one_time_prekeys.len());
+        assert_eq!(
+            loaded.one_time_prekeys.len(),
+            original.one_time_prekeys.len()
+        );
     }
 
     #[test]
@@ -129,7 +132,10 @@ mod tests {
         // Header::parse reaches the magic-byte comparison.
         std::fs::write(&path, vec![0u8; HEADER_LEN]).unwrap();
         let err = load(b"key", &path).unwrap_err();
-        assert!(matches!(err, StorageError::Format(FileFormatError::BadMagic(_))));
+        assert!(matches!(
+            err,
+            StorageError::Format(FileFormatError::BadMagic(_))
+        ));
     }
 
     #[test]

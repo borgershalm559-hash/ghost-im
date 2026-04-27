@@ -92,7 +92,9 @@ mod tests {
         assert_eq!(restored.ghost_id(), original_id);
         assert_eq!(restored.display_name.as_deref(), Some("Bob"));
         assert_eq!(restored.one_time_prekeys.len(), original_pk_count);
-        assert!(restored.device_key.verify_parent(&restored.identity_key.public()));
+        assert!(restored
+            .device_key
+            .verify_parent(&restored.identity_key.public()));
     }
 }
 
@@ -213,7 +215,9 @@ mod create_load_tests {
             })
             .unwrap();
             let loaded = Identity::load_default(Some("hunter2")).unwrap();
-            assert!(loaded.device_key.verify_parent(&loaded.identity_key.public()));
+            assert!(loaded
+                .device_key
+                .verify_parent(&loaded.identity_key.public()));
         });
     }
 

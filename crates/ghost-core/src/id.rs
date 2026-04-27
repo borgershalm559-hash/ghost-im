@@ -88,8 +88,8 @@ impl GhostId {
 
     /// Parse a bech32-encoded GhostId. Errors on wrong hrp or wrong length.
     pub fn from_bech32(s: &str) -> Result<Self, GhostIdParseError> {
-        let (hrp, data) = bech32::decode(s)
-            .map_err(|e| GhostIdParseError::InvalidBech32(e.to_string()))?;
+        let (hrp, data) =
+            bech32::decode(s).map_err(|e| GhostIdParseError::InvalidBech32(e.to_string()))?;
         if hrp.as_str() != HRP_GHOST {
             return Err(GhostIdParseError::WrongHrp(hrp.as_str().to_string()));
         }
@@ -154,7 +154,10 @@ mod bech32_tests {
         let err = GhostId::from_bech32(&short).unwrap_err();
         assert!(matches!(
             err,
-            GhostIdParseError::WrongLength { expected: 32, actual: 16 }
+            GhostIdParseError::WrongLength {
+                expected: 32,
+                actual: 16
+            }
         ));
     }
 

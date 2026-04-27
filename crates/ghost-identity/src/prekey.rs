@@ -17,7 +17,7 @@ impl PreKey {
     pub fn new(id: u32, is_last_resort: bool, created_at: u64) -> Self {
         Self {
             id,
-            secret: StaticSecret::random_from_rng(&mut OsRng),
+            secret: StaticSecret::random_from_rng(OsRng),
             is_last_resort,
             created_at,
         }

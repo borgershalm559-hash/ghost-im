@@ -48,7 +48,12 @@ mod tests {
         let id = GhostId::from_bytes([0u8; 32]);
         let fp = Fingerprint::of(&id);
         let s = fp.to_string();
-        assert_eq!(s.len(), 19, "expected 4*4 hex + 3 dashes = 19 chars, got {:?}", s);
+        assert_eq!(
+            s.len(),
+            19,
+            "expected 4*4 hex + 3 dashes = 19 chars, got {:?}",
+            s
+        );
         let groups: Vec<&str> = s.split('-').collect();
         assert_eq!(groups.len(), 4);
         for g in groups {
