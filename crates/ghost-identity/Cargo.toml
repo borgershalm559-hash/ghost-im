@@ -4,6 +4,31 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
-description = "Identity key management for Ghost."
+description = "Ghost identity: Ed25519 IK/DK, encrypted identity file, OS keystore."
 
 [dependencies]
+ghost-core = { path = "../ghost-core" }
+
+ed25519-dalek = { workspace = true }
+x25519-dalek = { workspace = true }
+chacha20poly1305 = { workspace = true }
+blake3 = { workspace = true }
+argon2 = { workspace = true }
+hkdf = { workspace = true }
+sha2 = { workspace = true }
+zeroize = { workspace = true }
+rand = { workspace = true }
+rand_core = { workspace = true }
+
+serde = { workspace = true }
+ciborium = { workspace = true }
+hex = { workspace = true }
+base64 = { workspace = true }
+
+thiserror = { workspace = true }
+directories = { workspace = true }
+keyring = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }
+tempfile = { workspace = true }
