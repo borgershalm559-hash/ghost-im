@@ -193,3 +193,121 @@ mod welcome_tests {
         assert_eq!(bob.epoch(), 1);
     }
 }
+
+impl MlsSession {
+    /// Encrypt an application message. Returns the wire-bytes representation of the MLS message.
+    pub fn encrypt_app_message(
+        &mut self,
+        provider: &GhostMlsProvider,
+        signer: &SignatureKeyPair,
+        plaintext: &[u8],
+    ) -> Result<Vec<u8>> {
+        use openmls::prelude::tls_codec::Serialize as _;
+        let msg = self
+            .group
+            .create_message(provider, signer, plaintext)
+            .map_err(|e| ProtoError::Mls(format!("create message: {e}")))?;
+        msg.tls_serialize_detached()
+            .map_err(|e| ProtoError::Mls(format!("serialize message: {e}")))
+    }
+
+    /// Decrypt an application message. Returns the plaintext bytes.
+    pub fn decrypt_app_message(
+        &mut self,
+        provider: &GhostMlsProvider,
+        wire_bytes: &[u8],
+    ) -> Result<Vec<u8>> {
+        use openmls::prelude::tls_codec::Deserialize as _;
+        let mls_in = MlsMessageIn::tls_deserialize(&mut &wire_bytes[..])
+            .map_err(|e| ProtoError::Mls(format!("deserialize: {e}")))?;
+        let protocol_msg = mls_in
+            .try_into_protocol_message()
+            .map_err(|e| ProtoError::Mls(format!("not a protocol message: {e}")))?;
+
+        let processed = self
+            .group
+            .process_message(provider, protocol_msg)
+            .map_err(|e| ProtoError::Mls(format!("process message: {e}")))?;
+
+        match processed.into_content() {
+            ProcessedMessageContent::ApplicationMessage(app) => Ok(app.into_bytes()),
+            _ => Err(ProtoError::Mls("expected ApplicationMessage".into())),
+        }
+    }
+}
+
+#[cfg(test)]
+mod app_message_tests {
+    use super::*;
+    use crate::key_package::generate_key_package;
+    use crate::mls_provider::new_provider;
+    use openmls::prelude::tls_codec::{Deserialize as TlsDeserialize, Serialize as TlsSerialize};
+
+    fn alice_and_bob_in_group() -> (
+        (GhostMlsProvider, MlsSession, SignatureKeyPair),
+        (GhostMlsProvider, MlsSession, SignatureKeyPair),
+    ) {
+        let alice_provider = new_provider();
+        let alice_ik = IdentityKey::generate();
+        let alice_dk = DeviceKey::generate(&alice_ik);
+        let mut alice = MlsSession::create(&alice_provider, &alice_ik, &alice_dk).unwrap();
+        let alice_signer = MlsSession::signer_from_dk(&alice_dk);
+
+        let bob_provider = new_provider();
+        let bob_ik = IdentityKey::generate();
+        let bob_dk = DeviceKey::generate(&bob_ik);
+        let bob_kp = generate_key_package(&bob_provider, &bob_ik, &bob_dk).unwrap();
+        let bob_signer = MlsSession::signer_from_dk(&bob_dk);
+
+        let invite = alice.add_member(&alice_provider, &alice_signer, bob_kp).unwrap();
+        let welcome_bytes = invite.welcome.tls_serialize_detached().unwrap();
+        let welcome_in =
+            MlsMessageIn::tls_deserialize(&mut welcome_bytes.as_slice()).unwrap();
+        let bob = MlsSession::join_via_welcome(&bob_provider, welcome_in).unwrap();
+
+        (
+            (alice_provider, alice, alice_signer),
+            (bob_provider, bob, bob_signer),
+        )
+    }
+
+    #[test]
+    fn alice_to_bob_round_trip() {
+        let ((alice_p, mut alice, alice_s), (bob_p, mut bob, _)) = alice_and_bob_in_group();
+        let wire = alice
+            .encrypt_app_message(&alice_p, &alice_s, b"hello bob")
+            .unwrap();
+        let recovered = bob.decrypt_app_message(&bob_p, &wire).unwrap();
+        assert_eq!(recovered, b"hello bob");
+    }
+
+    #[test]
+    fn bob_to_alice_round_trip() {
+        let ((alice_p, mut alice, _), (bob_p, mut bob, bob_s)) = alice_and_bob_in_group();
+        let wire = bob
+            .encrypt_app_message(&bob_p, &bob_s, b"hi alice")
+            .unwrap();
+        let recovered = alice.decrypt_app_message(&alice_p, &wire).unwrap();
+        assert_eq!(recovered, b"hi alice");
+    }
+
+    #[test]
+    fn tampered_ciphertext_is_rejected() {
+        let ((alice_p, mut alice, alice_s), (bob_p, mut bob, _)) = alice_and_bob_in_group();
+        let mut wire = alice
+            .encrypt_app_message(&alice_p, &alice_s, b"data")
+            .unwrap();
+        let last = wire.len() - 1;
+        wire[last] ^= 0xFF;
+        // openmls triggers a debug_assert in debug builds on AEAD failure, which panics.
+        // We use catch_unwind to treat either a panic or a returned Err as rejection.
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            bob.decrypt_app_message(&bob_p, &wire)
+        }));
+        match result {
+            Err(_panic) => { /* openmls debug_assert fired — tampered bytes rejected */ }
+            Ok(Err(_)) => { /* returned error — tampered bytes rejected */ }
+            Ok(Ok(_)) => panic!("expected decryption to fail on tampered ciphertext"),
+        }
+    }
+}
