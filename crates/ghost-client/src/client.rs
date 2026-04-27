@@ -7,8 +7,8 @@ use ghost_core::Fingerprint;
 use ghost_identity::{Identity, IdentityKey};
 use ghost_network::{peer_id_from_ghost_id, Network};
 use ghost_protocol::{
-    generate_key_package, new_provider, unwrap_message_lenient, wrap_message, MlsSession, MsgType,
-    PayloadType, UnwrappedMessage,
+    generate_key_package, new_provider, unwrap_message_lenient, wrap_message, GhostMlsProvider,
+    MlsSession, MsgType, PayloadType, UnwrappedMessage,
 };
 use ghost_server::Client as ServerClient;
 use ghost_server::{PresenceState, Server};
@@ -52,6 +52,7 @@ pub struct Client {
     pub(crate) presence: Arc<Mutex<PresenceState>>,
     pub(crate) local_peer_id: PeerId,
     pub(crate) local_addrs: Vec<Multiaddr>,
+    pub(crate) mls_provider: Arc<Mutex<GhostMlsProvider>>,
 }
 
 impl Client {
@@ -89,6 +90,8 @@ impl Client {
 
         let server = Server::spawn(ik.clone(), network.clone(), presence.clone(), db.clone())?;
 
+        let mls_provider = Arc::new(Mutex::new(new_provider()));
+
         let client = Self {
             identity,
             ik,
@@ -98,9 +101,10 @@ impl Client {
             presence,
             local_peer_id,
             local_addrs,
+            mls_provider,
         };
 
-        client.ensure_keypackages()?;
+        client.ensure_keypackages().await?;
         Ok(client)
     }
 
@@ -134,19 +138,23 @@ impl Client {
 
     /// Ensure at least `KEYPACKAGE_REFILL_THRESHOLD` available KeyPackages exist
     /// in `my_keypackages`. If fewer, generate a batch and insert them.
-    pub fn ensure_keypackages(&self) -> Result<()> {
+    ///
+    /// Uses the long-lived `mls_provider` so that the init private keys registered
+    /// during KeyPackage generation remain alive when `handle_mls_handshake` later
+    /// calls `MlsSession::join_via_welcome` against the same provider.
+    pub async fn ensure_keypackages(&self) -> Result<()> {
+        let provider = self.mls_provider.lock().await;
         let available = self.db.my_keypackages().list_available_one_time()?;
         if available.len() >= KEYPACKAGE_REFILL_THRESHOLD {
             return Ok(());
         }
-        let provider = new_provider();
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_secs())
             .unwrap_or(0);
         for _ in 0..KEYPACKAGE_BATCH {
             let kp = generate_key_package(
-                &provider,
+                &*provider,
                 &self.identity.identity_key,
                 &self.identity.device_key,
             )
@@ -400,6 +408,7 @@ impl Client {
 
         let db = self.db.clone();
         let ik = self.ik.clone();
+        let mls_provider = self.mls_provider.clone();
 
         let handle = tokio::spawn(async move {
             let mut server = server;
@@ -408,7 +417,7 @@ impl Client {
                     Some(e) => e,
                     None => break,
                 };
-                if let Err(e) = process_envelope(&db, &ik, &envelope.envelope).await {
+                if let Err(e) = process_envelope(&db, &ik, &mls_provider, &envelope.envelope).await {
                     eprintln!("inbox process error: {e}");
                 }
             }
@@ -420,6 +429,7 @@ impl Client {
 async fn process_envelope(
     db: &Arc<Database>,
     ik: &Arc<IdentityKey>,
+    mls_provider: &Arc<Mutex<GhostMlsProvider>>,
     envelope_bytes: &[u8],
 ) -> Result<()> {
     // Use lenient unwrap that skips sender-DK signature verification. Required for first-contact
@@ -429,7 +439,7 @@ async fn process_envelope(
 
     match unwrapped.payload_type {
         PayloadType::AppText => handle_app_text(db, &unwrapped).await,
-        PayloadType::MlsHandshake => handle_mls_handshake(db, &unwrapped).await,
+        PayloadType::MlsHandshake => handle_mls_handshake(db, mls_provider, &unwrapped).await,
         other => Err(ClientError::Internal(format!("unsupported payload type: {other:?}"))),
     }
 }
@@ -480,15 +490,22 @@ async fn handle_app_text(db: &Arc<Database>, unwrapped: &UnwrappedMessage) -> Re
     Ok(())
 }
 
-async fn handle_mls_handshake(db: &Arc<Database>, unwrapped: &UnwrappedMessage) -> Result<()> {
+async fn handle_mls_handshake(
+    db: &Arc<Database>,
+    mls_provider: &Arc<Mutex<GhostMlsProvider>>,
+    unwrapped: &UnwrappedMessage,
+) -> Result<()> {
     let sender_id = unwrapped.sender_id;
     let now = current_unix_secs();
 
-    let provider = new_provider();
     let welcome_in = MlsMessageIn::tls_deserialize(&mut unwrapped.payload.as_slice())
         .map_err(|e| ClientError::Internal(format!("welcome deserialize: {e}")))?;
+
+    // Lock the shared provider — it holds the init private keys registered during
+    // ensure_keypackages. Without this, join_via_welcome cannot find the matching key.
+    let provider = mls_provider.lock().await;
     let session =
-        MlsSession::join_via_welcome(&provider, welcome_in).map_err(ClientError::Protocol)?;
+        MlsSession::join_via_welcome(&*provider, welcome_in).map_err(ClientError::Protocol)?;
 
     // Persist or update contact.
     let fingerprint = Fingerprint::of(&sender_id).to_string();
@@ -511,9 +528,9 @@ async fn handle_mls_handshake(db: &Arc<Database>, unwrapped: &UnwrappedMessage) 
         db.contacts().insert(&contact)?;
     }
 
-    // Persist MLS group state.
+    // Persist MLS group state using the same provider (still locked).
     let state_blob = session
-        .serialize_state(&provider)
+        .serialize_state(&*provider)
         .map_err(ClientError::Protocol)?;
     let group_id = session.group_id_bytes();
     db.mls_groups().upsert(&MlsGroupRow {
