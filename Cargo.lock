@@ -1318,6 +1318,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "ghost-server"
+version = "0.0.1"
+dependencies = [
+ "blake3",
+ "ciborium",
+ "ghost-core",
+ "ghost-identity",
+ "ghost-network",
+ "ghost-protocol",
+ "ghost-storage",
+ "hex",
+ "libp2p",
+ "proptest",
+ "serde",
+ "tempfile",
+ "thiserror 1.0.69",
+ "tokio",
+]
+
+[[package]]
 name = "ghost-storage"
 version = "0.0.1"
 dependencies = [

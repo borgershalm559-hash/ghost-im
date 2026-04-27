@@ -1,0 +1,27 @@
+[package]
+name = "ghost-server"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Ghost embedded server: dispatches typed requests over the network."
+
+[dependencies]
+ghost-core     = { path = "../ghost-core" }
+ghost-identity = { path = "../ghost-identity" }
+ghost-protocol = { path = "../ghost-protocol" }
+ghost-storage  = { path = "../ghost-storage" }
+ghost-network  = { path = "../ghost-network" }
+
+tokio = { workspace = true }
+serde = { workspace = true }
+ciborium = { workspace = true }
+hex = { workspace = true }
+blake3 = { workspace = true }
+
+thiserror = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+proptest = { workspace = true }
+libp2p = { workspace = true }

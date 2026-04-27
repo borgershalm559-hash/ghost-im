@@ -6,6 +6,7 @@ members = [
     "crates/ghost-network",
     "crates/ghost-identity-cli",
     "crates/ghost-protocol",
+    "crates/ghost-server",
     "crates/ghost-storage",
 ]
 
