@@ -3,7 +3,6 @@
 use ghost_identity::Identity;
 use ghost_network::Network;
 use ghost_protocol::{delivery_public, new_provider, populate_initial_keypackages};
-use ghost_network::NetworkInbox;
 use ghost_server::{Client, PresenceState, Server};
 use ghost_storage::{derive_master_key, Database, MyKeyPackageRow};
 use libp2p::Multiaddr;

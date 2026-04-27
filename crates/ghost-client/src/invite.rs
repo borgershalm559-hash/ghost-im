@@ -108,8 +108,8 @@ impl GhostInvite {
     }
 
     pub fn from_bech32(s: &str) -> Result<Self> {
-        let (hrp, data) = bech32::decode(s)
-            .map_err(|e| ClientError::InviteParse(format!("bech32: {e}")))?;
+        let (hrp, data) =
+            bech32::decode(s).map_err(|e| ClientError::InviteParse(format!("bech32: {e}")))?;
         if hrp.as_str() != HRP_INVITE {
             return Err(ClientError::InviteParse(format!(
                 "wrong hrp: expected {HRP_INVITE}, got {}",

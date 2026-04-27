@@ -36,7 +36,9 @@ async fn alice_and_bob_full_messaging_flow() {
         .expect("create invite")
         .to_bech32()
         .expect("invite to bech32");
-    bob.add_contact(&alice_invite).await.expect("bob add contact");
+    bob.add_contact(&alice_invite)
+        .await
+        .expect("bob add contact");
 
     // Wait for Alice's inbox processor to handle the Welcome.
     tokio::time::sleep(Duration::from_millis(800)).await;
@@ -66,7 +68,10 @@ async fn alice_and_bob_full_messaging_flow() {
         alice_messages.len(),
         1,
         "Alice should have 1 received message. Got: {:?}",
-        alice_messages.iter().map(|m| &m.content).collect::<Vec<_>>()
+        alice_messages
+            .iter()
+            .map(|m| &m.content)
+            .collect::<Vec<_>>()
     );
     assert_eq!(alice_messages[0].content, "hello alice");
 

@@ -16,7 +16,6 @@ use ghost_storage::{
     derive_master_key, Contact, Database, Direction, MessageRow, MessageStatus, MlsGroupRow,
     MyKeyPackageRow, Verification,
 };
-use uuid::Uuid;
 use libp2p::{Multiaddr, PeerId};
 use openmls::prelude::tls_codec::{Deserialize as TlsDeserialize, Serialize as TlsSerialize};
 use openmls::prelude::{KeyPackageIn, MlsMessageIn};
@@ -25,6 +24,7 @@ use rand::RngCore;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Mutex;
+use uuid::Uuid;
 
 const KEYPACKAGE_REFILL_THRESHOLD: usize = 3;
 const KEYPACKAGE_BATCH: u32 = 5;
@@ -37,7 +37,9 @@ pub struct ClientConfig {
 impl Default for ClientConfig {
     fn default() -> Self {
         Self {
-            listen_addr: "/ip4/127.0.0.1/udp/0/quic-v1".parse().expect("valid multiaddr"),
+            listen_addr: "/ip4/127.0.0.1/udp/0/quic-v1"
+                .parse()
+                .expect("valid multiaddr"),
             passphrase: None,
         }
     }
@@ -49,6 +51,7 @@ pub struct Client {
     pub(crate) db: Arc<Database>,
     pub(crate) network: Arc<Mutex<Network>>,
     pub(crate) server: Mutex<Option<Server>>,
+    #[allow(dead_code)]
     pub(crate) presence: Arc<Mutex<PresenceState>>,
     pub(crate) local_peer_id: PeerId,
     pub(crate) local_addrs: Vec<Multiaddr>,
@@ -65,8 +68,8 @@ impl Client {
             identity.identity_key.secret_bytes(),
         ));
 
-        let db_path = ghost_identity::database_file()
-            .map_err(ghost_identity::IdentityError::from)?;
+        let db_path =
+            ghost_identity::database_file().map_err(ghost_identity::IdentityError::from)?;
         let master_key = derive_master_key(&ik);
         let db = Database::open_encrypted(&db_path, &master_key)?;
         db.migrate()?;
@@ -91,7 +94,13 @@ impl Client {
         // Split the inbox receiver out of the network before spawning the server
         // so the server loop can drain requests without holding the network mutex.
         let inbox = network.lock().await.split_inbox();
-        let server = Server::spawn(ik.clone(), inbox, network.clone(), presence.clone(), db.clone())?;
+        let server = Server::spawn(
+            ik.clone(),
+            inbox,
+            network.clone(),
+            presence.clone(),
+            db.clone(),
+        )?;
 
         let mls_provider = Arc::new(Mutex::new(new_provider()));
 
@@ -145,7 +154,13 @@ impl Client {
         // Split the inbox receiver out of the network before spawning the server
         // so the server loop can drain requests without holding the network mutex.
         let inbox = network.lock().await.split_inbox();
-        let server = Server::spawn(ik.clone(), inbox, network.clone(), presence.clone(), db.clone())?;
+        let server = Server::spawn(
+            ik.clone(),
+            inbox,
+            network.clone(),
+            presence.clone(),
+            db.clone(),
+        )?;
         let mls_provider = Arc::new(Mutex::new(new_provider()));
 
         let client = Self {
@@ -189,7 +204,13 @@ impl Client {
             .iter()
             .map(|a| a.to_string())
             .collect::<Vec<_>>();
-        Ok(GhostInvite::new(&self.ik, addresses, token, now, ttl_seconds))
+        Ok(GhostInvite::new(
+            &self.ik,
+            addresses,
+            token,
+            now,
+            ttl_seconds,
+        ))
     }
 
     /// Ensure at least `KEYPACKAGE_REFILL_THRESHOLD` available KeyPackages exist
@@ -210,7 +231,7 @@ impl Client {
             .unwrap_or(0);
         for _ in 0..KEYPACKAGE_BATCH {
             let kp = generate_key_package(
-                &*provider,
+                &provider,
                 &self.identity.identity_key,
                 &self.identity.device_key,
             )
@@ -355,8 +376,8 @@ impl Client {
             .load_for_contact(&contact_id)?
             .ok_or_else(|| crate::error::ClientError::MlsGroupNotFound(format!("{contact_id}")))?;
 
-        let (provider, mut session) =
-            MlsSession::deserialize_state(&mls_row.state_blob).map_err(crate::error::ClientError::Protocol)?;
+        let (provider, mut session) = MlsSession::deserialize_state(&mls_row.state_blob)
+            .map_err(crate::error::ClientError::Protocol)?;
 
         // Re-store the signer in the restored provider's storage.
         let signer = MlsSession::signer_from_dk(&self.identity.device_key);
@@ -372,11 +393,10 @@ impl Client {
         // Find peer's address (optional — may be None for contacts added via Welcome,
         // where we know the peer ID but not the listening address; libp2p will use
         // the active connection if one exists).
-        let contact = self
-            .db
-            .contacts()
-            .get(&contact_id)?
-            .ok_or_else(|| crate::error::ClientError::ContactNotFound(format!("{contact_id}")))?;
+        let contact =
+            self.db.contacts().get(&contact_id)?.ok_or_else(|| {
+                crate::error::ClientError::ContactNotFound(format!("{contact_id}"))
+            })?;
         let address: Option<Multiaddr> = contact
             .last_endpoint
             .as_ref()
@@ -447,7 +467,10 @@ impl Client {
         limit: u32,
         offset: u32,
     ) -> Result<Vec<MessageRow>> {
-        Ok(self.db.messages().list_for_contact(contact_id, limit, offset)?)
+        Ok(self
+            .db
+            .messages()
+            .list_for_contact(contact_id, limit, offset)?)
     }
 
     /// Spawn a background task that drains the Server's inbox and processes incoming envelopes.
@@ -474,7 +497,8 @@ impl Client {
                     Some(e) => e,
                     None => break,
                 };
-                if let Err(e) = process_envelope(&db, &ik, &mls_provider, &envelope.envelope).await {
+                if let Err(e) = process_envelope(&db, &ik, &mls_provider, &envelope.envelope).await
+                {
                     eprintln!("inbox process error: {e}");
                 }
             }
@@ -497,7 +521,9 @@ async fn process_envelope(
     match unwrapped.payload_type {
         PayloadType::AppText => handle_app_text(db, &unwrapped).await,
         PayloadType::MlsHandshake => handle_mls_handshake(db, mls_provider, &unwrapped).await,
-        other => Err(ClientError::Internal(format!("unsupported payload type: {other:?}"))),
+        other => Err(ClientError::Internal(format!(
+            "unsupported payload type: {other:?}"
+        ))),
     }
 }
 
@@ -562,7 +588,7 @@ async fn handle_mls_handshake(
     // ensure_keypackages. Without this, join_via_welcome cannot find the matching key.
     let provider = mls_provider.lock().await;
     let session =
-        MlsSession::join_via_welcome(&*provider, welcome_in).map_err(ClientError::Protocol)?;
+        MlsSession::join_via_welcome(&provider, welcome_in).map_err(ClientError::Protocol)?;
 
     // Persist or update contact.
     let fingerprint = Fingerprint::of(&sender_id).to_string();
@@ -587,7 +613,7 @@ async fn handle_mls_handshake(
 
     // Persist MLS group state using the same provider (still locked).
     let state_blob = session
-        .serialize_state(&*provider)
+        .serialize_state(&provider)
         .map_err(ClientError::Protocol)?;
     let group_id = session.group_id_bytes();
     db.mls_groups().upsert(&MlsGroupRow {
@@ -652,8 +678,10 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn open_succeeds_with_seeded_identity() {
-        let _g = LOCK.lock().unwrap();
-        let _dir = isolated_setup();
+        let _dir = {
+            let _g = LOCK.lock().unwrap();
+            isolated_setup()
+        };
 
         let client = Client::open(ClientConfig::default()).await.unwrap();
         assert!(!client.local_addrs().is_empty());
@@ -665,8 +693,10 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn create_invite_round_trips_via_bech32() {
-        let _g = LOCK.lock().unwrap();
-        let _dir = isolated_setup();
+        let _dir = {
+            let _g = LOCK.lock().unwrap();
+            isolated_setup()
+        };
 
         let client = Client::open(ClientConfig::default()).await.unwrap();
         let invite = client.create_invite(3600).unwrap();
