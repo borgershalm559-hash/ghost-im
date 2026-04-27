@@ -92,8 +92,8 @@ mod tests {
         assert_eq!(loaded.ghost_id(), original_id);
         assert_eq!(loaded.display_name.as_deref(), Some("Alice"));
         assert_eq!(
-            loaded.one_time_prekeys.len(),
-            original.one_time_prekeys.len()
+            loaded.mls_keypackages.len(),
+            original.mls_keypackages.len()
         );
     }
 
