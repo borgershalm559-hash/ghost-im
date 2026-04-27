@@ -7,9 +7,12 @@
 use crate::{Database, Result, StorageError};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-pub const APP_SCHEMA_VERSION: u32 = 1;
+pub const APP_SCHEMA_VERSION: u32 = 2;
 
-const MIGRATIONS: &[(u32, &str)] = &[(1, include_str!("../migrations/0001_init.sql"))];
+const MIGRATIONS: &[(u32, &str)] = &[
+    (1, include_str!("../migrations/0001_init.sql")),
+    (2, include_str!("../migrations/0002_add_contact_dk_pub.sql")),
+];
 
 fn now_seconds() -> i64 {
     SystemTime::now()

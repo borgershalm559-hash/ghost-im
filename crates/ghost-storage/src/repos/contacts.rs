@@ -34,6 +34,7 @@ pub struct Contact {
     pub verification: Verification,
     pub notes: Option<String>,
     pub blocked: bool,
+    pub dk_pub: Option<[u8; 32]>,
 }
 
 pub struct ContactsRepo<'a> {
@@ -51,8 +52,8 @@ impl<'a> ContactsRepo<'a> {
             tx.execute(
                 "INSERT INTO contacts (
                     ghost_id, display_name, local_alias, fingerprint, added_at,
-                    last_endpoint, verification, notes, blocked
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                    last_endpoint, verification, notes, blocked, dk_pub
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
                 params![
                     contact.ghost_id.as_bytes(),
                     contact.display_name,
@@ -63,6 +64,7 @@ impl<'a> ContactsRepo<'a> {
                     contact.verification as i64,
                     contact.notes,
                     contact.blocked as i64,
+                    contact.dk_pub.as_ref().map(|b| &b[..]),
                 ],
             )?;
             Ok(())
@@ -74,7 +76,7 @@ impl<'a> ContactsRepo<'a> {
         self.db.with_conn(|c| {
             let mut stmt = c.prepare(
                 "SELECT ghost_id, display_name, local_alias, fingerprint, added_at,
-                        last_endpoint, verification, notes, blocked
+                        last_endpoint, verification, notes, blocked, dk_pub
                    FROM contacts WHERE ghost_id = ?1",
             )?;
             let mut rows = stmt.query(params![id.as_bytes()])?;
@@ -90,7 +92,7 @@ impl<'a> ContactsRepo<'a> {
         self.db.with_conn(|c| {
             let mut stmt = c.prepare(
                 "SELECT ghost_id, display_name, local_alias, fingerprint, added_at,
-                        last_endpoint, verification, notes, blocked
+                        last_endpoint, verification, notes, blocked, dk_pub
                    FROM contacts ORDER BY added_at ASC",
             )?;
             let rows = stmt
@@ -110,7 +112,8 @@ impl<'a> ContactsRepo<'a> {
                     last_endpoint = ?4,
                     verification = ?5,
                     notes = ?6,
-                    blocked = ?7
+                    blocked = ?7,
+                    dk_pub = ?8
                  WHERE ghost_id = ?1",
                 params![
                     contact.ghost_id.as_bytes(),
@@ -120,6 +123,7 @@ impl<'a> ContactsRepo<'a> {
                     contact.verification as i64,
                     contact.notes,
                     contact.blocked as i64,
+                    contact.dk_pub.as_ref().map(|b| &b[..]),
                 ],
             )?;
             if n == 0 {
@@ -156,6 +160,21 @@ impl<'a> ContactsRepo<'a> {
         id_arr.copy_from_slice(&ghost_id_bytes);
         let verification: i64 = row.get(6)?;
         let blocked: i64 = row.get(8)?;
+        let dk_pub: Option<[u8; 32]> = match row.get::<_, Option<Vec<u8>>>(9)? {
+            None => None,
+            Some(bytes) => {
+                if bytes.len() != 32 {
+                    return Err(StorageError::InvalidBlob {
+                        table: "contacts",
+                        column: "dk_pub",
+                        detail: format!("expected 32 bytes, got {}", bytes.len()),
+                    });
+                }
+                let mut arr = [0u8; 32];
+                arr.copy_from_slice(&bytes);
+                Some(arr)
+            }
+        };
         Ok(Contact {
             ghost_id: GhostId::from_bytes(id_arr),
             display_name: row.get(1)?,
@@ -166,6 +185,7 @@ impl<'a> ContactsRepo<'a> {
             verification: Verification::from_i64(verification)?,
             notes: row.get(7)?,
             blocked: blocked != 0,
+            dk_pub,
         })
     }
 }
@@ -202,6 +222,7 @@ mod tests {
             verification: Verification::Unverified,
             notes: None,
             blocked: false,
+            dk_pub: None,
         }
     }
 
@@ -275,5 +296,15 @@ mod tests {
         db.contacts().insert(&c).unwrap();
         let err = db.contacts().insert(&c).unwrap_err();
         assert!(matches!(err, StorageError::Sqlite(_)));
+    }
+
+    #[test]
+    fn dk_pub_round_trips() {
+        let db = fresh_db();
+        let mut c = fake_contact(10, "WithDk");
+        c.dk_pub = Some([42u8; 32]);
+        db.contacts().insert(&c).unwrap();
+        let loaded = db.contacts().get(&c.ghost_id).unwrap().unwrap();
+        assert_eq!(loaded.dk_pub, Some([42u8; 32]));
     }
 }

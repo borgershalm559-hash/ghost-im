@@ -50,6 +50,7 @@ fn alice_and_bob_persist_and_continue_after_restart() {
                 verification: Verification::Unverified,
                 notes: None,
                 blocked: false,
+                dk_pub: None,
             })
             .unwrap();
         bob_db
@@ -64,6 +65,7 @@ fn alice_and_bob_persist_and_continue_after_restart() {
                 verification: Verification::Unverified,
                 notes: None,
                 blocked: false,
+                dk_pub: None,
             })
             .unwrap();
 

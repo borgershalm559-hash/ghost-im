@@ -232,6 +232,7 @@ mod tests {
                 verification: Verification::Unverified,
                 notes: None,
                 blocked: false,
+                dk_pub: None,
             })
             .unwrap();
         (db, id)
