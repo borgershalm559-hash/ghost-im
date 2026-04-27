@@ -4,10 +4,15 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
-description = "CLI for Ghost identity management."
+description = "CLI smoke-test harness for ghost-identity (create, show, wipe)."
 
 [[bin]]
-name = "ghost-identity-cli"
+name = "ghost-identity"
 path = "src/main.rs"
 
 [dependencies]
+ghost-core     = { path = "../ghost-core" }
+ghost-identity = { path = "../ghost-identity" }
+
+clap = { workspace = true }
+anyhow = { workspace = true }
