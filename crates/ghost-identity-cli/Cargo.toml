@@ -1,0 +1,13 @@
+[package]
+name = "ghost-identity-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "CLI for Ghost identity management."
+
+[[bin]]
+name = "ghost-identity-cli"
+path = "src/main.rs"
+
+[dependencies]

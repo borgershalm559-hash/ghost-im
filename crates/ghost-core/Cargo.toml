@@ -1,0 +1,18 @@
+[package]
+name = "ghost-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Core types and errors shared across Ghost crates."
+
+[dependencies]
+serde = { workspace = true }
+blake3 = { workspace = true }
+bech32 = { workspace = true }
+hex = { workspace = true }
+thiserror = { workspace = true }
+zeroize = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }

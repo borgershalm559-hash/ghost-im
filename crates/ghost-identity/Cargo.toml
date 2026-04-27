@@ -1,0 +1,9 @@
+[package]
+name = "ghost-identity"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Identity key management for Ghost."
+
+[dependencies]
