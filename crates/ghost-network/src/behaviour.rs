@@ -104,8 +104,7 @@ impl GhostBehaviour {
         let kad = kad::Behaviour::with_config(local_peer_id, kad_store, kad_config);
 
         // identify::Config::new takes (protocol_version: String, local_public_key: PublicKey).
-        let identify_config =
-            identify::Config::new("/ghost/v1".to_string(), kp.public());
+        let identify_config = identify::Config::new("/ghost/v1".to_string(), kp.public());
         let identify = identify::Behaviour::new(identify_config);
 
         // request_response::Behaviour::new requires TCodec: Default + Clone.

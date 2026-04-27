@@ -61,11 +61,7 @@ impl AddressRecord {
         })
     }
 
-    pub fn signing_bytes(
-        ghost_id: &GhostId,
-        endpoints: &[String],
-        expires_at: u64,
-    ) -> [u8; 32] {
+    pub fn signing_bytes(ghost_id: &GhostId, endpoints: &[String], expires_at: u64) -> [u8; 32] {
         let mut hasher = blake3::Hasher::new();
         hasher.update(ghost_id.as_bytes());
         let n = endpoints.len() as u32;
@@ -136,8 +132,8 @@ mod tests {
     #[test]
     fn verify_fails_when_signature_tampered() {
         let ik = IdentityKey::generate();
-        let mut r = AddressRecord::new(&ik, vec!["/ip4/1.2.3.4/udp/1/quic-v1".into()], 0, 1000)
-            .unwrap();
+        let mut r =
+            AddressRecord::new(&ik, vec!["/ip4/1.2.3.4/udp/1/quic-v1".into()], 0, 1000).unwrap();
         r.signature[0] ^= 0xFF;
         let err = r.verify(0).unwrap_err();
         assert!(matches!(err, NetworkError::InvalidSignature(_)));
@@ -163,7 +159,10 @@ mod tests {
         let ik = IdentityKey::generate();
         let original = AddressRecord::new(
             &ik,
-            vec!["/ip4/1.2.3.4/udp/1/quic-v1".into(), "/ip6/::1/udp/2/quic-v1".into()],
+            vec![
+                "/ip4/1.2.3.4/udp/1/quic-v1".into(),
+                "/ip6/::1/udp/2/quic-v1".into(),
+            ],
             123,
             456,
         )

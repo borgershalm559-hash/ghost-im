@@ -12,10 +12,8 @@ use futures::StreamExt;
 use ghost_core::GhostId;
 use ghost_identity::IdentityKey;
 use libp2p::{
-    core::transport::ListenerId,
-    kad, request_response,
-    swarm::SwarmEvent,
-    Multiaddr, PeerId, Swarm, SwarmBuilder,
+    core::transport::ListenerId, kad, request_response, swarm::SwarmEvent, Multiaddr, PeerId,
+    Swarm, SwarmBuilder,
 };
 use std::collections::HashMap;
 use std::time::Duration;
@@ -98,9 +96,7 @@ impl Network {
                 GhostBehaviour::new(local_peer_id, &kp_clone)
             })
             .map_err(|e| NetworkError::Transport(format!("build behaviour: {e}")))?
-            .with_swarm_config(|c| {
-                c.with_idle_connection_timeout(Duration::from_secs(60))
-            })
+            .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(60)))
             .build();
 
         let (cmd_tx, cmd_rx) = mpsc::channel::<Command>(64);
@@ -202,12 +198,15 @@ impl Network {
 // Event loop (runs inside a tokio task)
 // ---------------------------------------------------------------------------
 
+/// One outbound send that is waiting for the dialled peer to connect.
+type PendingSend = (Vec<u8>, oneshot::Sender<Result<()>>);
+
 /// State tracked between iterations of the select! loop.
 struct LoopState {
     local_addrs: Vec<Multiaddr>,
     /// Bytes queued for peers we are currently dialling.
     /// On `ConnectionEstablished` we drain the queue and send the messages.
-    pending_sends: HashMap<PeerId, Vec<(Vec<u8>, oneshot::Sender<Result<()>>)>>,
+    pending_sends: HashMap<PeerId, Vec<PendingSend>>,
     pending_puts: HashMap<kad::QueryId, oneshot::Sender<Result<()>>>,
     pending_gets: HashMap<kad::QueryId, oneshot::Sender<Result<Option<AddressRecord>>>>,
 }
@@ -310,8 +309,8 @@ fn handle_command(cmd: Command, swarm: &mut Swarm<GhostBehaviour>, state: &mut L
                             state.pending_puts.insert(qid, reply);
                         }
                         Err(e) => {
-                            let _ = reply
-                                .send(Err(NetworkError::DhtQuery(format!("put_record: {e}"))));
+                            let _ =
+                                reply.send(Err(NetworkError::DhtQuery(format!("put_record: {e}"))));
                         }
                     }
                 }
@@ -348,10 +347,7 @@ async fn handle_swarm_event(
             // Flush any messages queued while dialling.
             if let Some(queue) = state.pending_sends.remove(&peer_id) {
                 for (bytes, reply) in queue {
-                    swarm
-                        .behaviour_mut()
-                        .messages
-                        .send_request(&peer_id, bytes);
+                    swarm.behaviour_mut().messages.send_request(&peer_id, bytes);
                     let _ = reply.send(Ok(()));
                 }
             }
@@ -386,9 +382,11 @@ async fn handle_swarm_event(
         // ----------------------------------------------------------------
         // Kademlia: outbound query results
         // ----------------------------------------------------------------
-        SwarmEvent::Behaviour(GhostBehaviourEvent::Kad(
-            kad::Event::OutboundQueryProgressed { id, result, .. },
-        )) => {
+        SwarmEvent::Behaviour(GhostBehaviourEvent::Kad(kad::Event::OutboundQueryProgressed {
+            id,
+            result,
+            ..
+        })) => {
             match result {
                 kad::QueryResult::PutRecord(res) => {
                     if let Some(reply) = state.pending_puts.remove(&id) {
@@ -405,12 +403,8 @@ async fn handle_swarm_event(
                             Ok(kad::GetRecordOk::FoundRecord(peer_record)) => {
                                 AddressRecord::from_cbor(&peer_record.record.value).map(Some)
                             }
-                            Ok(kad::GetRecordOk::FinishedWithNoAdditionalRecord { .. }) => {
-                                Ok(None)
-                            }
-                            Err(e) => {
-                                Err(NetworkError::DhtQuery(format!("get_record: {e:?}")))
-                            }
+                            Ok(kad::GetRecordOk::FinishedWithNoAdditionalRecord { .. }) => Ok(None),
+                            Err(e) => Err(NetworkError::DhtQuery(format!("get_record: {e:?}"))),
                         };
                         let _ = reply.send(mapped);
                     }

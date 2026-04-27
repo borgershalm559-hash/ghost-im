@@ -41,12 +41,7 @@ pub struct PresenceRecord {
 }
 
 impl PresenceRecord {
-    pub fn new(
-        ik: &IdentityKey,
-        online: bool,
-        now: u64,
-        ttl_seconds: u64,
-    ) -> Result<Self> {
+    pub fn new(ik: &IdentityKey, online: bool, now: u64, ttl_seconds: u64) -> Result<Self> {
         let ghost_id = ik.ghost_id();
         let expires_at = now.saturating_add(ttl_seconds);
         let to_sign = Self::signing_bytes(&ghost_id, online, now, expires_at);
@@ -81,12 +76,8 @@ impl PresenceRecord {
         let pub_key = VerifyingKey::from_bytes(self.ghost_id.as_bytes())
             .map_err(|e| NetworkError::Invalid(format!("ghost_id: {e}")))?;
         let sig = Signature::from_bytes(&self.signature);
-        let to_verify = Self::signing_bytes(
-            &self.ghost_id,
-            self.online,
-            self.last_seen,
-            self.expires_at,
-        );
+        let to_verify =
+            Self::signing_bytes(&self.ghost_id, self.online, self.last_seen, self.expires_at);
         pub_key
             .verify(&to_verify, &sig)
             .map_err(|_| NetworkError::InvalidSignature(format!("{}", self.ghost_id)))

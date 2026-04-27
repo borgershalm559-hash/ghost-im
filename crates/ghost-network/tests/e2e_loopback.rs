@@ -23,7 +23,10 @@ async fn alice_and_bob_exchange_bytes() {
 
     // Wait for Bob's listener to bind and surface the chosen address.
     let bob_addrs = wait_for_addrs(&bob, Duration::from_secs(5)).await;
-    assert!(!bob_addrs.is_empty(), "bob should have at least one local address");
+    assert!(
+        !bob_addrs.is_empty(),
+        "bob should have at least one local address"
+    );
     let bob_addr = bob_addrs.into_iter().next().unwrap();
     println!("bob address: {bob_addr}");
 
@@ -40,7 +43,10 @@ async fn alice_and_bob_exchange_bytes() {
         .expect("inbound timeout")
         .expect("bob received None");
     match event {
-        InboundEvent::Message { sender, payload: rx_payload } => {
+        InboundEvent::Message {
+            sender,
+            payload: rx_payload,
+        } => {
             assert_eq!(sender, alice_peer_id, "sender PeerId must match Alice");
             assert_eq!(rx_payload, payload, "payload bytes must round-trip");
         }
