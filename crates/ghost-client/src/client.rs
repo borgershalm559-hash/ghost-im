@@ -1,11 +1,13 @@
 //! Client orchestration: opens Identity + Database + Network + Server, runs background tasks.
 
+use crate::invite::GhostInvite;
 use crate::Result;
 use ghost_identity::{Identity, IdentityKey};
 use ghost_network::Network;
 use ghost_server::{PresenceState, Server};
 use ghost_storage::{derive_master_key, Database};
 use libp2p::{Multiaddr, PeerId};
+use rand::RngCore;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Mutex;
@@ -93,6 +95,22 @@ impl Client {
     pub fn ghost_id(&self) -> ghost_core::GhostId {
         self.ik.ghost_id()
     }
+
+    /// Build a fresh invite advertising our current addresses.
+    pub fn create_invite(&self, ttl_seconds: u64) -> Result<GhostInvite> {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        let mut token = [0u8; 16];
+        rand::thread_rng().fill_bytes(&mut token);
+        let addresses = self
+            .local_addrs
+            .iter()
+            .map(|a| a.to_string())
+            .collect::<Vec<_>>();
+        Ok(GhostInvite::new(&self.ik, addresses, token, now, ttl_seconds))
+    }
 }
 
 async fn wait_for_local_addrs(network: &Arc<Mutex<Network>>) -> Vec<Multiaddr> {
@@ -112,6 +130,7 @@ async fn wait_for_local_addrs(network: &Arc<Mutex<Network>>) -> Vec<Multiaddr> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::GhostInvite;
     use ghost_identity::{keystore, CreateOptions, Identity};
     use std::sync::Mutex as StdMutex;
     use tempfile::tempdir;
@@ -139,6 +158,23 @@ mod tests {
         let client = Client::open(ClientConfig::default()).await.unwrap();
         assert!(!client.local_addrs().is_empty());
         let _ = client.ghost_id();
+
+        let _ = keystore::wipe_secret();
+        std::env::remove_var("GHOST_HOME");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn create_invite_round_trips_via_bech32() {
+        let _g = LOCK.lock().unwrap();
+        let _dir = isolated_setup();
+
+        let client = Client::open(ClientConfig::default()).await.unwrap();
+        let invite = client.create_invite(3600).unwrap();
+        let s = invite.to_bech32().unwrap();
+        let restored = GhostInvite::from_bech32(&s).unwrap();
+        assert_eq!(restored.ghost_id, client.ghost_id());
+        assert_eq!(restored.addresses.len(), client.local_addrs().len());
+        restored.verify(invite.expires_at - 1).unwrap();
 
         let _ = keystore::wipe_secret();
         std::env::remove_var("GHOST_HOME");
