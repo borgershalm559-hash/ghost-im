@@ -5,6 +5,7 @@ use crate::Result;
 use ghost_identity::IdentityKey;
 use ghost_network::Network;
 use ghost_protocol::delivery_public;
+use ghost_storage::Database;
 use std::sync::Arc;
 use tokio::sync::{mpsc, Mutex};
 
@@ -43,9 +44,10 @@ impl Server {
         ik: Arc<IdentityKey>,
         network: Arc<Mutex<Network>>,
         presence: Arc<Mutex<PresenceState>>,
+        db: Arc<Database>,
     ) -> Result<Self> {
         let (inbox_tx, inbox_rx) = mpsc::channel::<InboundEnvelope>(64);
-        let task = tokio::spawn(run_server(ik, network, presence, inbox_tx));
+        let task = tokio::spawn(run_server(ik, network, presence, db, inbox_tx));
         Ok(Self {
             _task: task,
             inbox_rx,
@@ -62,6 +64,7 @@ async fn run_server(
     ik: Arc<IdentityKey>,
     network: Arc<Mutex<Network>>,
     presence: Arc<Mutex<PresenceState>>,
+    db: Arc<Database>,
     inbox_tx: mpsc::Sender<InboundEnvelope>,
 ) {
     loop {
@@ -74,7 +77,7 @@ async fn run_server(
             break;
         };
 
-        let response = handle_request(&ik, &presence, &inbox_tx, &req.payload).await;
+        let response = handle_request(&ik, &presence, &db, &inbox_tx, &req.payload).await;
 
         let bytes = match response.to_cbor() {
             Ok(b) => b,
@@ -93,6 +96,7 @@ async fn run_server(
 async fn handle_request(
     ik: &IdentityKey,
     presence: &Arc<Mutex<PresenceState>>,
+    db: &Arc<Database>,
     inbox_tx: &mpsc::Sender<InboundEnvelope>,
     payload: &[u8],
 ) -> GhostResponse {
@@ -109,10 +113,7 @@ async fn handle_request(
         GhostRequest::GetDeliveryKey => GhostResponse::DeliveryKey {
             x25519_pub: *delivery_public(ik).as_bytes(),
         },
-        GhostRequest::GetKeyPackage => {
-            // Plan 05 Task 4 fills this in (storage integration).
-            GhostResponse::Error { reason: "key package handler not implemented yet".into() }
-        }
+        GhostRequest::GetKeyPackage => handle_get_key_package(db).await,
         GhostRequest::GetPresence => {
             let p = *presence.lock().await;
             GhostResponse::Presence {
@@ -124,5 +125,36 @@ async fn handle_request(
             let _ = inbox_tx.send(InboundEnvelope { envelope }).await;
             GhostResponse::InboxAck
         }
+    }
+}
+
+async fn handle_get_key_package(db: &Arc<Database>) -> GhostResponse {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+
+    let db_clone = db.clone();
+    let result = tokio::task::spawn_blocking(move || -> std::result::Result<Vec<u8>, crate::ServerError> {
+        let repo = db_clone.my_keypackages();
+        let available = repo.list_available_one_time().map_err(crate::ServerError::from)?;
+        let candidate = match available.first() {
+            Some(c) => c.clone(),
+            None => match repo.last_resort().map_err(crate::ServerError::from)? {
+                Some(lr) => lr,
+                None => return Err(crate::ServerError::NoKeyPackagesAvailable),
+            },
+        };
+        if !candidate.is_last_resort {
+            repo.mark_consumed(&candidate.package_id, now).map_err(crate::ServerError::from)?;
+        }
+        Ok(candidate.package_blob.clone())
+    })
+    .await;
+
+    match result {
+        Ok(Ok(bytes)) => GhostResponse::KeyPackage { bytes },
+        Ok(Err(e)) => GhostResponse::Error { reason: format!("{e}") },
+        Err(e) => GhostResponse::Error { reason: format!("task join: {e}") },
     }
 }
