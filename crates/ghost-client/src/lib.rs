@@ -1,8 +1,10 @@
 //! Ghost client orchestration.
 
+pub mod client;
 pub mod error;
 pub mod invite;
 
+pub use client::{Client, ClientConfig};
 pub use error::{ClientError, Result};
 pub use invite::GhostInvite;
 
