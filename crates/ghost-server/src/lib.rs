@@ -1,9 +1,11 @@
 //! Ghost embedded server: dispatches typed requests over the network.
 
+pub mod client;
 pub mod error;
 pub mod messages;
 pub mod server;
 
+pub use client::Client;
 pub use error::{Result, ServerError};
 pub use messages::{GhostRequest, GhostResponse, MIN_COMPAT_VERSION, PROTOCOL_VERSION};
 pub use server::{InboundEnvelope, PresenceState, Server};

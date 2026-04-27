@@ -18,10 +18,10 @@ serde = { workspace = true }
 ciborium = { workspace = true }
 hex = { workspace = true }
 blake3 = { workspace = true }
+libp2p = { workspace = true }
 
 thiserror = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
 proptest = { workspace = true }
-libp2p = { workspace = true }
