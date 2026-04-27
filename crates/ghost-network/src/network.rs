@@ -13,8 +13,7 @@ use ghost_core::GhostId;
 use ghost_identity::IdentityKey;
 use libp2p::{
     core::{transport::ListenerId, ConnectedPoint},
-    kad,
-    request_response,
+    kad, request_response,
     swarm::SwarmEvent,
     Multiaddr, PeerId, Swarm, SwarmBuilder,
 };
@@ -347,8 +346,8 @@ fn handle_command(cmd: Command, swarm: &mut Swarm<GhostBehaviour>, state: &mut L
                             state.pending_puts.insert(qid, reply);
                         }
                         Err(e) => {
-                            let _ = reply
-                                .send(Err(NetworkError::DhtQuery(format!("put_record: {e}"))));
+                            let _ =
+                                reply.send(Err(NetworkError::DhtQuery(format!("put_record: {e}"))));
                         }
                     }
                 }
@@ -382,9 +381,7 @@ async fn handle_swarm_event(
         }
 
         SwarmEvent::ConnectionEstablished {
-            peer_id,
-            endpoint,
-            ..
+            peer_id, endpoint, ..
         } => {
             // Flush queued requests only when OUR dial succeeded (we are the
             // dialer). Inbound connections (from the remote dialling us) do not
@@ -392,10 +389,8 @@ async fn handle_swarm_event(
             if matches!(endpoint, ConnectedPoint::Dialer { .. }) {
                 if let Some(queue) = state.pending_dials.remove(&peer_id) {
                     for (bytes, reply) in queue {
-                        let request_id = swarm
-                            .behaviour_mut()
-                            .messages
-                            .send_request(&peer_id, bytes);
+                        let request_id =
+                            swarm.behaviour_mut().messages.send_request(&peer_id, bytes);
                         state.pending_requests.insert(request_id, reply);
                     }
                 }

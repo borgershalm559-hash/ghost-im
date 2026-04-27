@@ -62,7 +62,10 @@ async fn alice_and_bob_exchange_bytes() {
             .expect("bob inbound timeout")
             .expect("bob received None");
         assert_eq!(req.sender, alice_peer_id, "sender PeerId must match Alice");
-        assert_eq!(req.payload, payload_for_bob, "payload bytes must round-trip");
+        assert_eq!(
+            req.payload, payload_for_bob,
+            "payload bytes must round-trip"
+        );
         bob.respond(req.response, Vec::new())
             .await
             .expect("bob respond");

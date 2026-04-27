@@ -16,19 +16,10 @@ pub struct InboundEnvelope {
 }
 
 /// Snapshot of presence state — set by the application layer.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct PresenceState {
     pub online: bool,
     pub last_seen: u64,
-}
-
-impl Default for PresenceState {
-    fn default() -> Self {
-        Self {
-            online: false,
-            last_seen: 0,
-        }
-    }
 }
 
 pub struct Server {
@@ -102,7 +93,11 @@ async fn handle_request(
 ) -> GhostResponse {
     let request = match GhostRequest::from_cbor(payload) {
         Ok(r) => r,
-        Err(e) => return GhostResponse::Error { reason: format!("decode: {e}") },
+        Err(e) => {
+            return GhostResponse::Error {
+                reason: format!("decode: {e}"),
+            }
+        }
     };
 
     match request {
@@ -135,26 +130,35 @@ async fn handle_get_key_package(db: &Arc<Database>) -> GhostResponse {
         .unwrap_or(0);
 
     let db_clone = db.clone();
-    let result = tokio::task::spawn_blocking(move || -> std::result::Result<Vec<u8>, crate::ServerError> {
-        let repo = db_clone.my_keypackages();
-        let available = repo.list_available_one_time().map_err(crate::ServerError::from)?;
-        let candidate = match available.first() {
-            Some(c) => c.clone(),
-            None => match repo.last_resort().map_err(crate::ServerError::from)? {
-                Some(lr) => lr,
-                None => return Err(crate::ServerError::NoKeyPackagesAvailable),
-            },
-        };
-        if !candidate.is_last_resort {
-            repo.mark_consumed(&candidate.package_id, now).map_err(crate::ServerError::from)?;
-        }
-        Ok(candidate.package_blob.clone())
-    })
+    let result = tokio::task::spawn_blocking(
+        move || -> std::result::Result<Vec<u8>, crate::ServerError> {
+            let repo = db_clone.my_keypackages();
+            let available = repo
+                .list_available_one_time()
+                .map_err(crate::ServerError::from)?;
+            let candidate = match available.first() {
+                Some(c) => c.clone(),
+                None => match repo.last_resort().map_err(crate::ServerError::from)? {
+                    Some(lr) => lr,
+                    None => return Err(crate::ServerError::NoKeyPackagesAvailable),
+                },
+            };
+            if !candidate.is_last_resort {
+                repo.mark_consumed(&candidate.package_id, now)
+                    .map_err(crate::ServerError::from)?;
+            }
+            Ok(candidate.package_blob.clone())
+        },
+    )
     .await;
 
     match result {
         Ok(Ok(bytes)) => GhostResponse::KeyPackage { bytes },
-        Ok(Err(e)) => GhostResponse::Error { reason: format!("{e}") },
-        Err(e) => GhostResponse::Error { reason: format!("task join: {e}") },
+        Ok(Err(e)) => GhostResponse::Error {
+            reason: format!("{e}"),
+        },
+        Err(e) => GhostResponse::Error {
+            reason: format!("task join: {e}"),
+        },
     }
 }

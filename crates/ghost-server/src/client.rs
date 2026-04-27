@@ -39,8 +39,13 @@ impl Client {
     ) -> Result<(String, String)> {
         let resp = self.send_request(peer, addr, GhostRequest::Version).await?;
         match resp.into_ok()? {
-            GhostResponse::Version { protocol, min_compat } => Ok((protocol, min_compat)),
-            other => Err(ServerError::InvalidResponse(format!("expected Version, got {other:?}"))),
+            GhostResponse::Version {
+                protocol,
+                min_compat,
+            } => Ok((protocol, min_compat)),
+            other => Err(ServerError::InvalidResponse(format!(
+                "expected Version, got {other:?}"
+            ))),
         }
     }
 
@@ -49,34 +54,38 @@ impl Client {
         peer: PeerId,
         addr: Option<Multiaddr>,
     ) -> Result<[u8; 32]> {
-        let resp = self.send_request(peer, addr, GhostRequest::GetDeliveryKey).await?;
+        let resp = self
+            .send_request(peer, addr, GhostRequest::GetDeliveryKey)
+            .await?;
         match resp.into_ok()? {
             GhostResponse::DeliveryKey { x25519_pub } => Ok(x25519_pub),
-            other => Err(ServerError::InvalidResponse(format!("expected DeliveryKey, got {other:?}"))),
+            other => Err(ServerError::InvalidResponse(format!(
+                "expected DeliveryKey, got {other:?}"
+            ))),
         }
     }
 
-    pub async fn get_key_package(
-        &self,
-        peer: PeerId,
-        addr: Option<Multiaddr>,
-    ) -> Result<Vec<u8>> {
-        let resp = self.send_request(peer, addr, GhostRequest::GetKeyPackage).await?;
+    pub async fn get_key_package(&self, peer: PeerId, addr: Option<Multiaddr>) -> Result<Vec<u8>> {
+        let resp = self
+            .send_request(peer, addr, GhostRequest::GetKeyPackage)
+            .await?;
         match resp.into_ok()? {
             GhostResponse::KeyPackage { bytes } => Ok(bytes),
-            other => Err(ServerError::InvalidResponse(format!("expected KeyPackage, got {other:?}"))),
+            other => Err(ServerError::InvalidResponse(format!(
+                "expected KeyPackage, got {other:?}"
+            ))),
         }
     }
 
-    pub async fn get_presence(
-        &self,
-        peer: PeerId,
-        addr: Option<Multiaddr>,
-    ) -> Result<(bool, u64)> {
-        let resp = self.send_request(peer, addr, GhostRequest::GetPresence).await?;
+    pub async fn get_presence(&self, peer: PeerId, addr: Option<Multiaddr>) -> Result<(bool, u64)> {
+        let resp = self
+            .send_request(peer, addr, GhostRequest::GetPresence)
+            .await?;
         match resp.into_ok()? {
             GhostResponse::Presence { online, last_seen } => Ok((online, last_seen)),
-            other => Err(ServerError::InvalidResponse(format!("expected Presence, got {other:?}"))),
+            other => Err(ServerError::InvalidResponse(format!(
+                "expected Presence, got {other:?}"
+            ))),
         }
     }
 
@@ -91,7 +100,9 @@ impl Client {
             .await?;
         match resp.into_ok()? {
             GhostResponse::InboxAck => Ok(()),
-            other => Err(ServerError::InvalidResponse(format!("expected InboxAck, got {other:?}"))),
+            other => Err(ServerError::InvalidResponse(format!(
+                "expected InboxAck, got {other:?}"
+            ))),
         }
     }
 }

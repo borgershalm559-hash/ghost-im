@@ -59,7 +59,12 @@ async fn bob_queries_all_endpoints_on_alice() {
 
     // Listen on loopback with an OS-assigned port.
     let listen_addr: Multiaddr = "/ip4/127.0.0.1/udp/0/quic-v1".parse().unwrap();
-    alice_network.lock().await.listen_on(listen_addr).await.unwrap();
+    alice_network
+        .lock()
+        .await
+        .listen_on(listen_addr)
+        .await
+        .unwrap();
     let alice_addr = wait_for_addr(&alice_network).await;
 
     // Set Alice's presence.
@@ -116,7 +121,10 @@ async fn bob_queries_all_endpoints_on_alice() {
         .get_key_package(alice_peer_id, Some(alice_addr.clone()))
         .await
         .expect("get_key_package second");
-    assert_ne!(kp1, kp2, "consecutive calls must return different KeyPackages");
+    assert_ne!(
+        kp1, kp2,
+        "consecutive calls must return different KeyPackages"
+    );
 
     // ===== 5. Presence =====
     let (online, last_seen) = bob_client
@@ -129,7 +137,11 @@ async fn bob_queries_all_endpoints_on_alice() {
     // ===== 6. InboxMessage — envelope arrives at Server.next_inbox() =====
     let envelope_bytes = b"sealed envelope from bob".to_vec();
     bob_client
-        .send_inbox(alice_peer_id, Some(alice_addr.clone()), envelope_bytes.clone())
+        .send_inbox(
+            alice_peer_id,
+            Some(alice_addr.clone()),
+            envelope_bytes.clone(),
+        )
         .await
         .expect("send_inbox");
 

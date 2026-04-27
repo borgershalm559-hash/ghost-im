@@ -87,7 +87,9 @@ mod tests {
             GhostRequest::GetDeliveryKey,
             GhostRequest::GetKeyPackage,
             GhostRequest::GetPresence,
-            GhostRequest::InboxMessage { envelope: vec![1, 2, 3, 4] },
+            GhostRequest::InboxMessage {
+                envelope: vec![1, 2, 3, 4],
+            },
         ];
         for req in cases {
             let bytes = req.to_cbor().unwrap();
@@ -102,11 +104,20 @@ mod tests {
                 protocol: PROTOCOL_VERSION.to_string(),
                 min_compat: MIN_COMPAT_VERSION.to_string(),
             },
-            GhostResponse::DeliveryKey { x25519_pub: [9u8; 32] },
-            GhostResponse::KeyPackage { bytes: vec![5, 6, 7] },
-            GhostResponse::Presence { online: true, last_seen: 1234 },
+            GhostResponse::DeliveryKey {
+                x25519_pub: [9u8; 32],
+            },
+            GhostResponse::KeyPackage {
+                bytes: vec![5, 6, 7],
+            },
+            GhostResponse::Presence {
+                online: true,
+                last_seen: 1234,
+            },
             GhostResponse::InboxAck,
-            GhostResponse::Error { reason: "test".to_string() },
+            GhostResponse::Error {
+                reason: "test".to_string(),
+            },
         ];
         for resp in cases {
             let bytes = resp.to_cbor().unwrap();
@@ -123,7 +134,9 @@ mod tests {
 
     #[test]
     fn into_ok_fails_on_error_variant() {
-        let r = GhostResponse::Error { reason: "boom".to_string() };
+        let r = GhostResponse::Error {
+            reason: "boom".to_string(),
+        };
         let err = r.into_ok().unwrap_err();
         assert!(matches!(err, ServerError::Remote(_)));
     }
