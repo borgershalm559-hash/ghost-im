@@ -2,6 +2,8 @@
 
 pub mod contacts;
 pub mod mls_groups;
+pub mod my_keypackages;
 
 pub use contacts::{Contact, ContactsRepo, Verification};
 pub use mls_groups::{MlsGroupRow, MlsGroupsRepo};
+pub use my_keypackages::{MyKeyPackageRow, MyKeyPackagesRepo};

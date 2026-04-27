@@ -10,7 +10,10 @@ pub use database::Database;
 pub use error::{Result, StorageError};
 pub use master_key::{derive_master_key, master_key_pragma, MASTER_KEY_LEN};
 pub use migrations::APP_SCHEMA_VERSION;
-pub use repos::{Contact, ContactsRepo, MlsGroupRow, MlsGroupsRepo, Verification};
+pub use repos::{
+    Contact, ContactsRepo, MlsGroupRow, MlsGroupsRepo, MyKeyPackageRow, MyKeyPackagesRepo,
+    Verification,
+};
 
 #[cfg(test)]
 mod smoke_tests {
