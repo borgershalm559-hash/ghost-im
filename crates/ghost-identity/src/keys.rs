@@ -57,6 +57,82 @@ impl std::fmt::Debug for IdentityKey {
     }
 }
 
+/// Device Key — Ed25519 keypair signed by the parent IdentityKey.
+/// In MVP-1 there is one DK per identity; the architecture supports adding more later.
+#[derive(Serialize, Deserialize)]
+pub struct DeviceKey {
+    signing: SigningKey,
+    /// Signature by the parent IdentityKey over `signing.verifying_key().to_bytes()`.
+    parent_signature: Signature,
+}
+
+impl DeviceKey {
+    /// Generate a fresh DeviceKey signed by the given IdentityKey.
+    pub fn generate(parent: &IdentityKey) -> Self {
+        let signing = SigningKey::generate(&mut OsRng);
+        let pubkey_bytes = signing.verifying_key().to_bytes();
+        let parent_signature = parent.sign(&pubkey_bytes);
+        Self {
+            signing,
+            parent_signature,
+        }
+    }
+
+    pub fn public(&self) -> VerifyingKey {
+        self.signing.verifying_key()
+    }
+
+    pub fn parent_signature(&self) -> &Signature {
+        &self.parent_signature
+    }
+
+    pub fn sign(&self, message: &[u8]) -> Signature {
+        self.signing.sign(message)
+    }
+
+    pub fn verify_parent(&self, parent_pub: &VerifyingKey) -> bool {
+        let pubkey_bytes = self.signing.verifying_key().to_bytes();
+        parent_pub
+            .verify(&pubkey_bytes, &self.parent_signature)
+            .is_ok()
+    }
+}
+
+impl std::fmt::Debug for DeviceKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let pub_short = hex::encode(&self.signing.verifying_key().to_bytes()[..4]);
+        write!(f, "DeviceKey(pub={}…)", pub_short)
+    }
+}
+
+#[cfg(test)]
+mod device_key_tests {
+    use super::*;
+
+    #[test]
+    fn dk_signature_verifies_against_parent() {
+        let ik = IdentityKey::generate();
+        let dk = DeviceKey::generate(&ik);
+        assert!(dk.verify_parent(&ik.public()));
+    }
+
+    #[test]
+    fn dk_signature_rejects_wrong_parent() {
+        let ik_a = IdentityKey::generate();
+        let ik_b = IdentityKey::generate();
+        let dk = DeviceKey::generate(&ik_a);
+        assert!(!dk.verify_parent(&ik_b.public()));
+    }
+
+    #[test]
+    fn dk_signs_messages_independently() {
+        let ik = IdentityKey::generate();
+        let dk = DeviceKey::generate(&ik);
+        let sig = dk.sign(b"message-from-device");
+        assert!(dk.public().verify(b"message-from-device", &sig).is_ok());
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
