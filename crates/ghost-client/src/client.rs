@@ -2,15 +2,26 @@
 
 use crate::invite::GhostInvite;
 use crate::Result;
+use ghost_core::Fingerprint;
 use ghost_identity::{Identity, IdentityKey};
-use ghost_network::Network;
+use ghost_network::{peer_id_from_ghost_id, Network};
+use ghost_protocol::{
+    generate_key_package, new_provider, wrap_message, MlsSession, MsgType, PayloadType,
+};
+use ghost_server::Client as ServerClient;
 use ghost_server::{PresenceState, Server};
-use ghost_storage::{derive_master_key, Database};
+use ghost_storage::{derive_master_key, Contact, Database, MlsGroupRow, MyKeyPackageRow, Verification};
 use libp2p::{Multiaddr, PeerId};
+use openmls::prelude::tls_codec::{Deserialize as TlsDeserialize, Serialize as TlsSerialize};
+use openmls::prelude::KeyPackageIn;
+use openmls_traits::OpenMlsProvider;
 use rand::RngCore;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Mutex;
+
+const KEYPACKAGE_REFILL_THRESHOLD: usize = 3;
+const KEYPACKAGE_BATCH: u32 = 5;
 
 pub struct ClientConfig {
     pub listen_addr: Multiaddr,
@@ -72,7 +83,7 @@ impl Client {
 
         let server = Server::spawn(ik.clone(), network.clone(), presence.clone(), db.clone())?;
 
-        Ok(Self {
+        let client = Self {
             identity,
             ik,
             db,
@@ -81,7 +92,10 @@ impl Client {
             presence,
             local_peer_id,
             local_addrs,
-        })
+        };
+
+        client.ensure_keypackages()?;
+        Ok(client)
     }
 
     pub fn local_peer_id(&self) -> PeerId {
@@ -111,6 +125,155 @@ impl Client {
             .collect::<Vec<_>>();
         Ok(GhostInvite::new(&self.ik, addresses, token, now, ttl_seconds))
     }
+
+    /// Ensure at least `KEYPACKAGE_REFILL_THRESHOLD` available KeyPackages exist
+    /// in `my_keypackages`. If fewer, generate a batch and insert them.
+    pub fn ensure_keypackages(&self) -> Result<()> {
+        let available = self.db.my_keypackages().list_available_one_time()?;
+        if available.len() >= KEYPACKAGE_REFILL_THRESHOLD {
+            return Ok(());
+        }
+        let provider = new_provider();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        for _ in 0..KEYPACKAGE_BATCH {
+            let kp = generate_key_package(
+                &provider,
+                &self.identity.identity_key,
+                &self.identity.device_key,
+            )
+            .map_err(crate::error::ClientError::Protocol)?;
+            let kp_bytes = kp
+                .tls_serialize_detached()
+                .map_err(|e| crate::error::ClientError::Internal(format!("kp serialize: {e}")))?;
+            let pkg_id = *blake3::hash(&kp_bytes).as_bytes();
+            self.db.my_keypackages().insert(&MyKeyPackageRow {
+                package_id: pkg_id,
+                package_blob: kp_bytes,
+                private_key: vec![],
+                created_at: now as i64,
+                consumed_at: None,
+                is_last_resort: false,
+            })?;
+        }
+        Ok(())
+    }
+
+    /// Add a contact via an invite. Connects to the peer, fetches a KeyPackage,
+    /// creates an MLS group, sends a Welcome envelope, and persists state.
+    pub async fn add_contact(&self, invite_str: &str) -> Result<()> {
+        let invite = GhostInvite::from_bech32(invite_str)?;
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        invite.verify(now)?;
+
+        let peer_id = peer_id_from_ghost_id(&invite.ghost_id)?;
+        let address = invite
+            .addresses
+            .first()
+            .ok_or_else(|| crate::error::ClientError::Invalid("invite has no addresses".into()))?
+            .parse::<Multiaddr>()
+            .map_err(|e| crate::error::ClientError::Invalid(format!("address: {e}")))?;
+
+        let server_client = ServerClient::new(self.network.clone());
+        let kp_bytes = server_client
+            .get_key_package(peer_id, Some(address.clone()))
+            .await?;
+
+        // Validate KeyPackage and create MLS group + Welcome.
+        let provider = new_provider();
+        let kp_in = KeyPackageIn::tls_deserialize(&mut kp_bytes.as_slice())
+            .map_err(|e| crate::error::ClientError::Internal(format!("kp deserialize: {e}")))?;
+        let kp = kp_in
+            .validate(provider.crypto(), openmls::versions::ProtocolVersion::Mls10)
+            .map_err(|e| crate::error::ClientError::Internal(format!("kp validate: {e}")))?;
+
+        let mut session = MlsSession::create(
+            &provider,
+            &self.identity.identity_key,
+            &self.identity.device_key,
+        )
+        .map_err(crate::error::ClientError::Protocol)?;
+        let signer = MlsSession::signer_from_dk(&self.identity.device_key);
+        let invite_result = session
+            .add_member(&provider, &signer, kp)
+            .map_err(crate::error::ClientError::Protocol)?;
+
+        let welcome_bytes = invite_result
+            .welcome
+            .tls_serialize_detached()
+            .map_err(|e| crate::error::ClientError::Internal(format!("welcome serialize: {e}")))?;
+
+        let peer_delivery_pub_bytes = server_client
+            .get_delivery_key(peer_id, Some(address.clone()))
+            .await?;
+        let peer_delivery_pub = x25519_dalek::PublicKey::from(peer_delivery_pub_bytes);
+
+        let envelope_bytes = wrap_message(
+            &self.identity.identity_key,
+            &self.identity.device_key,
+            invite.ghost_id,
+            &peer_delivery_pub,
+            MsgType::MlsHandshake,
+            PayloadType::MlsHandshake,
+            welcome_bytes,
+            now,
+        )
+        .map_err(crate::error::ClientError::Protocol)?;
+
+        server_client
+            .send_inbox(peer_id, Some(address.clone()), envelope_bytes)
+            .await?;
+
+        // Persist contact + MLS state.
+        let fingerprint = Fingerprint::of(&invite.ghost_id).to_string();
+        let contact = Contact {
+            ghost_id: invite.ghost_id,
+            display_name: None,
+            local_alias: None,
+            fingerprint,
+            added_at: now as i64,
+            last_endpoint: Some(address.to_string()),
+            verification: Verification::Unverified,
+            notes: None,
+            blocked: false,
+            dk_pub: None,
+        };
+        let existing = self.db.contacts().get(&invite.ghost_id)?;
+        if existing.is_some() {
+            self.db.contacts().update(&contact)?;
+        } else {
+            self.db.contacts().insert(&contact)?;
+        }
+
+        let state_blob = session
+            .serialize_state(&provider)
+            .map_err(crate::error::ClientError::Protocol)?;
+        let group_id = session.group_id_bytes();
+        self.db.mls_groups().upsert(&MlsGroupRow {
+            group_id: bytes_to_array_32(&group_id),
+            contact_id: invite.ghost_id,
+            state_blob,
+            current_epoch: session.current_epoch(),
+            created_at: now as i64,
+            last_updated: now as i64,
+        })?;
+
+        Ok(())
+    }
+
+    /// List all contacts in the database.
+    pub fn list_contacts(&self) -> Result<Vec<Contact>> {
+        Ok(self.db.contacts().list()?)
+    }
+}
+
+fn bytes_to_array_32(b: &[u8]) -> [u8; 32] {
+    *blake3::hash(b).as_bytes()
 }
 
 async fn wait_for_local_addrs(network: &Arc<Mutex<Network>>) -> Vec<Multiaddr> {
