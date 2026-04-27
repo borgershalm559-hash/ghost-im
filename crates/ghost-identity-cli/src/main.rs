@@ -31,6 +31,12 @@ enum Command {
         #[arg(long)]
         overwrite: bool,
     },
+    /// Load and display the existing Ghost identity.
+    Show {
+        /// Passphrase used during creation (if any).
+        #[arg(long)]
+        passphrase: Option<String>,
+    },
 }
 
 fn cmd_create(
@@ -63,6 +69,34 @@ fn cmd_create(
     Ok(())
 }
 
+fn cmd_show(passphrase: Option<String>) -> Result<()> {
+    let identity =
+        Identity::load_default(passphrase.as_deref()).context("load identity")?;
+    let path = identity_file().context("resolve identity path")?;
+    let id = identity.ghost_id();
+    let fp = Fingerprint::of(&id);
+
+    println!("Identity loaded.");
+    println!("  Path:         {}", path.display());
+    println!("  Ghost ID:     {}", id);
+    println!("  Fingerprint:  {}", fp);
+    println!(
+        "  Display name: {}",
+        identity.display_name.as_deref().unwrap_or("<none>")
+    );
+    println!(
+        "  Pre-keys:     {} one-time + 1 last-resort",
+        identity.one_time_prekeys.len()
+    );
+    println!("  Created at:   {} (unix seconds)", identity.created_at);
+
+    let dk_ok = identity
+        .device_key
+        .verify_parent(&identity.identity_key.public());
+    println!("  DK signature: {}", if dk_ok { "valid" } else { "INVALID" });
+    Ok(())
+}
+
 fn main() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
@@ -74,6 +108,7 @@ fn main() -> Result<()> {
             passphrase,
             overwrite,
         } => cmd_create(display_name, passphrase, overwrite)?,
+        Command::Show { passphrase } => cmd_show(passphrase)?,
     }
     Ok(())
 }
