@@ -1,13 +1,10 @@
 //! Ghost storage: SQLCipher-encrypted SQLite database.
-//!
-//! Provides a `Database` wrapper around `rusqlite::Connection` plus repository APIs
-//! for the seven core tables (contacts, mls_groups, my_keypackages, messages,
-//! outbox, inbox_dedup, settings). The DB encryption key is derived from the
-//! user's IdentityKey via HKDF, so unlocking the identity unlocks the DB.
 
+pub mod database;
 pub mod error;
 pub mod master_key;
 
+pub use database::Database;
 pub use error::{Result, StorageError};
 pub use master_key::{derive_master_key, master_key_pragma, MASTER_KEY_LEN};
 
