@@ -1,0 +1,276 @@
+//! Contacts repository.
+
+use crate::{Database, Result, StorageError};
+use ghost_core::GhostId;
+use rusqlite::params;
+
+/// Verification status of a contact.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Verification {
+    Unverified = 0,
+    Verified = 1,
+}
+
+impl Verification {
+    pub fn from_i64(v: i64) -> Result<Self> {
+        match v {
+            0 => Ok(Self::Unverified),
+            1 => Ok(Self::Verified),
+            other => Err(StorageError::Invalid(format!(
+                "unknown verification value {other}"
+            ))),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct Contact {
+    pub ghost_id: GhostId,
+    pub display_name: Option<String>,
+    pub local_alias: Option<String>,
+    pub fingerprint: String,
+    pub added_at: i64,
+    pub last_endpoint: Option<String>,
+    pub verification: Verification,
+    pub notes: Option<String>,
+    pub blocked: bool,
+}
+
+pub struct ContactsRepo<'a> {
+    db: &'a Database,
+}
+
+impl<'a> ContactsRepo<'a> {
+    pub fn new(db: &'a Database) -> Self {
+        Self { db }
+    }
+
+    /// Insert a new contact. Errors if the GhostId already exists.
+    pub fn insert(&self, contact: &Contact) -> Result<()> {
+        self.db.with_tx(|tx| {
+            tx.execute(
+                "INSERT INTO contacts (
+                    ghost_id, display_name, local_alias, fingerprint, added_at,
+                    last_endpoint, verification, notes, blocked
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                params![
+                    contact.ghost_id.as_bytes(),
+                    contact.display_name,
+                    contact.local_alias,
+                    contact.fingerprint,
+                    contact.added_at,
+                    contact.last_endpoint,
+                    contact.verification as i64,
+                    contact.notes,
+                    contact.blocked as i64,
+                ],
+            )?;
+            Ok(())
+        })
+    }
+
+    /// Fetch a contact by GhostId. Returns `Ok(None)` if absent.
+    pub fn get(&self, id: &GhostId) -> Result<Option<Contact>> {
+        self.db.with_conn(|c| {
+            let mut stmt = c.prepare(
+                "SELECT ghost_id, display_name, local_alias, fingerprint, added_at,
+                        last_endpoint, verification, notes, blocked
+                   FROM contacts WHERE ghost_id = ?1",
+            )?;
+            let mut rows = stmt.query(params![id.as_bytes()])?;
+            match rows.next()? {
+                Some(row) => Ok(Some(Self::row_to_contact(row)?)),
+                None => Ok(None),
+            }
+        })
+    }
+
+    /// List all contacts, ordered by `added_at` ascending.
+    pub fn list(&self) -> Result<Vec<Contact>> {
+        self.db.with_conn(|c| {
+            let mut stmt = c.prepare(
+                "SELECT ghost_id, display_name, local_alias, fingerprint, added_at,
+                        last_endpoint, verification, notes, blocked
+                   FROM contacts ORDER BY added_at ASC",
+            )?;
+            let rows = stmt
+                .query_map([], |row| Ok(Self::row_to_contact(row)))?
+                .collect::<std::result::Result<Vec<_>, _>>()?;
+            rows.into_iter().collect()
+        })
+    }
+
+    /// Update mutable fields. The GhostId and fingerprint are immutable.
+    pub fn update(&self, contact: &Contact) -> Result<()> {
+        self.db.with_tx(|tx| {
+            let n = tx.execute(
+                "UPDATE contacts SET
+                    display_name = ?2,
+                    local_alias = ?3,
+                    last_endpoint = ?4,
+                    verification = ?5,
+                    notes = ?6,
+                    blocked = ?7
+                 WHERE ghost_id = ?1",
+                params![
+                    contact.ghost_id.as_bytes(),
+                    contact.display_name,
+                    contact.local_alias,
+                    contact.last_endpoint,
+                    contact.verification as i64,
+                    contact.notes,
+                    contact.blocked as i64,
+                ],
+            )?;
+            if n == 0 {
+                return Err(StorageError::NotFound(format!(
+                    "contact {}",
+                    contact.ghost_id
+                )));
+            }
+            Ok(())
+        })
+    }
+
+    /// Delete a contact by GhostId. Returns true iff a row was deleted.
+    pub fn delete(&self, id: &GhostId) -> Result<bool> {
+        self.db.with_tx(|tx| {
+            let n = tx.execute("DELETE FROM contacts WHERE ghost_id = ?1", params![id.as_bytes()])?;
+            Ok(n > 0)
+        })
+    }
+
+    fn row_to_contact(row: &rusqlite::Row<'_>) -> Result<Contact> {
+        let ghost_id_bytes: Vec<u8> = row.get(0)?;
+        if ghost_id_bytes.len() != 32 {
+            return Err(StorageError::InvalidBlob {
+                table: "contacts",
+                column: "ghost_id",
+                detail: format!("expected 32 bytes, got {}", ghost_id_bytes.len()),
+            });
+        }
+        let mut id_arr = [0u8; 32];
+        id_arr.copy_from_slice(&ghost_id_bytes);
+        let verification: i64 = row.get(6)?;
+        let blocked: i64 = row.get(8)?;
+        Ok(Contact {
+            ghost_id: GhostId::from_bytes(id_arr),
+            display_name: row.get(1)?,
+            local_alias: row.get(2)?,
+            fingerprint: row.get(3)?,
+            added_at: row.get(4)?,
+            last_endpoint: row.get(5)?,
+            verification: Verification::from_i64(verification)?,
+            notes: row.get(7)?,
+            blocked: blocked != 0,
+        })
+    }
+}
+
+impl Database {
+    pub fn contacts(&self) -> ContactsRepo<'_> {
+        ContactsRepo::new(self)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::master_key::derive_master_key;
+    use ghost_core::Fingerprint;
+    use ghost_identity::IdentityKey;
+
+    fn fresh_db() -> Database {
+        let db = Database::open_in_memory(&derive_master_key(&IdentityKey::generate())).unwrap();
+        db.migrate().unwrap();
+        db
+    }
+
+    fn fake_contact(seed: u8, name: &str) -> Contact {
+        let id = GhostId::from_bytes([seed; 32]);
+        let fp = Fingerprint::of(&id).to_string();
+        Contact {
+            ghost_id: id,
+            display_name: Some(name.to_string()),
+            local_alias: None,
+            fingerprint: fp,
+            added_at: 1700000000 + seed as i64,
+            last_endpoint: None,
+            verification: Verification::Unverified,
+            notes: None,
+            blocked: false,
+        }
+    }
+
+    #[test]
+    fn insert_then_get_roundtrips() {
+        let db = fresh_db();
+        let c = fake_contact(1, "Alice");
+        db.contacts().insert(&c).unwrap();
+        let loaded = db.contacts().get(&c.ghost_id).unwrap().unwrap();
+        assert_eq!(loaded.ghost_id, c.ghost_id);
+        assert_eq!(loaded.display_name.as_deref(), Some("Alice"));
+        assert_eq!(loaded.fingerprint, c.fingerprint);
+    }
+
+    #[test]
+    fn get_returns_none_for_missing() {
+        let db = fresh_db();
+        let id = GhostId::from_bytes([99; 32]);
+        assert!(db.contacts().get(&id).unwrap().is_none());
+    }
+
+    #[test]
+    fn list_orders_by_added_at_asc() {
+        let db = fresh_db();
+        db.contacts().insert(&fake_contact(3, "C")).unwrap();
+        db.contacts().insert(&fake_contact(1, "A")).unwrap();
+        db.contacts().insert(&fake_contact(2, "B")).unwrap();
+        let list = db.contacts().list().unwrap();
+        assert_eq!(list.len(), 3);
+        assert_eq!(list[0].display_name.as_deref(), Some("A"));
+        assert_eq!(list[1].display_name.as_deref(), Some("B"));
+        assert_eq!(list[2].display_name.as_deref(), Some("C"));
+    }
+
+    #[test]
+    fn update_changes_mutable_fields() {
+        let db = fresh_db();
+        let mut c = fake_contact(5, "Old");
+        db.contacts().insert(&c).unwrap();
+        c.display_name = Some("New".to_string());
+        c.verification = Verification::Verified;
+        c.blocked = true;
+        db.contacts().update(&c).unwrap();
+        let loaded = db.contacts().get(&c.ghost_id).unwrap().unwrap();
+        assert_eq!(loaded.display_name.as_deref(), Some("New"));
+        assert_eq!(loaded.verification, Verification::Verified);
+        assert!(loaded.blocked);
+    }
+
+    #[test]
+    fn update_missing_returns_not_found() {
+        let db = fresh_db();
+        let c = fake_contact(7, "Ghost");
+        let err = db.contacts().update(&c).unwrap_err();
+        assert!(matches!(err, StorageError::NotFound(_)));
+    }
+
+    #[test]
+    fn delete_removes_row() {
+        let db = fresh_db();
+        let c = fake_contact(8, "Bye");
+        db.contacts().insert(&c).unwrap();
+        assert!(db.contacts().delete(&c.ghost_id).unwrap());
+        assert!(db.contacts().get(&c.ghost_id).unwrap().is_none());
+    }
+
+    #[test]
+    fn insert_duplicate_errors() {
+        let db = fresh_db();
+        let c = fake_contact(9, "Once");
+        db.contacts().insert(&c).unwrap();
+        let err = db.contacts().insert(&c).unwrap_err();
+        assert!(matches!(err, StorageError::Sqlite(_)));
+    }
+}
