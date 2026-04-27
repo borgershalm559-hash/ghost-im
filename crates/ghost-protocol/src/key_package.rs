@@ -35,6 +35,56 @@ pub fn generate_key_package(
     Ok(bundle.key_package().clone())
 }
 
+/// Generate `count` KeyPackages and store their TLS-serialized bytes in `identity.mls_keypackages`.
+/// Updates `identity.next_keypackage_id` accordingly. Each KeyPackage's private init key is
+/// registered with `provider`'s storage so that processing the corresponding Welcome later works.
+///
+/// Typically called immediately after `Identity::generate` to populate the publishable bundle.
+pub fn populate_initial_keypackages(
+    identity: &mut ghost_identity::Identity,
+    provider: &GhostMlsProvider,
+    count: u32,
+) -> Result<()> {
+    use openmls::prelude::tls_codec::Serialize as _;
+
+    let ik = &identity.identity_key;
+    let dk = &identity.device_key;
+    for _ in 0..count {
+        let kp = generate_key_package(provider, ik, dk)?;
+        let bytes = kp
+            .tls_serialize_detached()
+            .map_err(|e| ProtoError::Mls(format!("serialize key package: {e}")))?;
+        identity.mls_keypackages.push(bytes);
+        identity.next_keypackage_id += 1;
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod populate_tests {
+    use super::*;
+    use crate::mls_provider::new_provider;
+
+    #[test]
+    fn populate_adds_correct_count() {
+        let provider = new_provider();
+        let mut id = ghost_identity::Identity::generate(Some("Alice".into()), 0);
+        populate_initial_keypackages(&mut id, &provider, 5).unwrap();
+        assert_eq!(id.mls_keypackages.len(), 5);
+        assert_eq!(id.next_keypackage_id, 5);
+    }
+
+    #[test]
+    fn populate_is_additive() {
+        let provider = new_provider();
+        let mut id = ghost_identity::Identity::generate(None, 0);
+        populate_initial_keypackages(&mut id, &provider, 3).unwrap();
+        populate_initial_keypackages(&mut id, &provider, 2).unwrap();
+        assert_eq!(id.mls_keypackages.len(), 5);
+        assert_eq!(id.next_keypackage_id, 5);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
