@@ -2,9 +2,11 @@
 
 pub mod error;
 pub mod messages;
+pub mod server;
 
 pub use error::{Result, ServerError};
 pub use messages::{GhostRequest, GhostResponse, MIN_COMPAT_VERSION, PROTOCOL_VERSION};
+pub use server::{InboundEnvelope, PresenceState, Server};
 
 #[cfg(test)]
 mod smoke_tests {
