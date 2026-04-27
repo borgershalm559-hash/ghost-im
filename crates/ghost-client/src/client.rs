@@ -10,7 +10,11 @@ use ghost_protocol::{
 };
 use ghost_server::Client as ServerClient;
 use ghost_server::{PresenceState, Server};
-use ghost_storage::{derive_master_key, Contact, Database, MlsGroupRow, MyKeyPackageRow, Verification};
+use ghost_storage::{
+    derive_master_key, Contact, Database, Direction, MessageRow, MessageStatus, MlsGroupRow,
+    MyKeyPackageRow, Verification,
+};
+use uuid::Uuid;
 use libp2p::{Multiaddr, PeerId};
 use openmls::prelude::tls_codec::{Deserialize as TlsDeserialize, Serialize as TlsSerialize};
 use openmls::prelude::KeyPackageIn;
@@ -269,6 +273,114 @@ impl Client {
     /// List all contacts in the database.
     pub fn list_contacts(&self) -> Result<Vec<Contact>> {
         Ok(self.db.contacts().list()?)
+    }
+
+    /// Encrypt and send a text message to a contact.
+    pub async fn send_message(&self, contact_id: ghost_core::GhostId, text: &str) -> Result<()> {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+
+        // Load MLS state.
+        let mls_row = self
+            .db
+            .mls_groups()
+            .load_for_contact(&contact_id)?
+            .ok_or_else(|| crate::error::ClientError::MlsGroupNotFound(format!("{contact_id}")))?;
+
+        let (provider, mut session) =
+            MlsSession::deserialize_state(&mls_row.state_blob).map_err(crate::error::ClientError::Protocol)?;
+
+        // Re-store the signer in the restored provider's storage.
+        let signer = MlsSession::signer_from_dk(&self.identity.device_key);
+        signer
+            .store(provider.storage())
+            .map_err(|e| crate::error::ClientError::Internal(format!("store signer: {e}")))?;
+
+        // MLS-encrypt.
+        let mls_ct = session
+            .encrypt_app_message(&provider, &signer, text.as_bytes())
+            .map_err(crate::error::ClientError::Protocol)?;
+
+        // Find peer's address.
+        let contact = self
+            .db
+            .contacts()
+            .get(&contact_id)?
+            .ok_or_else(|| crate::error::ClientError::ContactNotFound(format!("{contact_id}")))?;
+        let address = contact
+            .last_endpoint
+            .as_ref()
+            .ok_or_else(|| crate::error::ClientError::Invalid("contact has no endpoint".into()))?
+            .parse::<Multiaddr>()
+            .map_err(|e| crate::error::ClientError::Invalid(format!("address: {e}")))?;
+        let peer_id = peer_id_from_ghost_id(&contact_id)?;
+
+        // Fetch peer's delivery key.
+        let server_client = ServerClient::new(self.network.clone());
+        let peer_delivery_bytes = server_client
+            .get_delivery_key(peer_id, Some(address.clone()))
+            .await?;
+        let peer_delivery_pub = x25519_dalek::PublicKey::from(peer_delivery_bytes);
+
+        // Wrap envelope.
+        let envelope_bytes = wrap_message(
+            &self.identity.identity_key,
+            &self.identity.device_key,
+            contact_id,
+            &peer_delivery_pub,
+            MsgType::AppMessage,
+            PayloadType::AppText,
+            mls_ct,
+            now,
+        )
+        .map_err(crate::error::ClientError::Protocol)?;
+
+        // Send.
+        server_client
+            .send_inbox(peer_id, Some(address), envelope_bytes)
+            .await?;
+
+        // Persist outgoing message.
+        let msg_uuid = *Uuid::now_v7().as_bytes();
+        self.db.messages().insert(&MessageRow {
+            msg_uuid,
+            contact_id,
+            direction: Direction::Outgoing,
+            content_type: 0,
+            content: text.to_string(),
+            sent_at: now as i64,
+            received_at: None,
+            status: MessageStatus::Sent,
+            reply_to: None,
+            expires_at: None,
+        })?;
+
+        // Persist advanced MLS state.
+        let new_state = session
+            .serialize_state(&provider)
+            .map_err(crate::error::ClientError::Protocol)?;
+        self.db.mls_groups().upsert(&MlsGroupRow {
+            group_id: mls_row.group_id,
+            contact_id,
+            state_blob: new_state,
+            current_epoch: session.current_epoch(),
+            created_at: mls_row.created_at,
+            last_updated: now as i64,
+        })?;
+
+        Ok(())
+    }
+
+    /// List messages for a contact, oldest first, paginated.
+    pub fn list_messages(
+        &self,
+        contact_id: &ghost_core::GhostId,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<MessageRow>> {
+        Ok(self.db.messages().list_for_contact(contact_id, limit, offset)?)
     }
 }
 
