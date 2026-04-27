@@ -5,6 +5,7 @@ pub mod file_format;
 pub mod identity;
 pub mod keys;
 pub mod keystore;
+pub mod paths;
 pub mod prekey;
 pub mod storage;
 
@@ -12,5 +13,6 @@ pub use file_format::{Header, FILE_FORMAT_VERSION};
 pub use identity::{Identity, IDENTITY_SCHEMA_VERSION, INITIAL_PREKEY_COUNT};
 pub use keys::{DeviceKey, IdentityKey};
 pub use keystore::{load_or_create_secret, store_secret, wipe_secret, KeystoreError};
+pub use paths::{database_file, ghost_home, identity_file, logs_dir, PathsError};
 pub use prekey::{generate_batch, PreKey};
 pub use storage::{load, save, StorageError};
