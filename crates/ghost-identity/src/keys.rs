@@ -38,6 +38,13 @@ impl IdentityKey {
         self.signing.sign(message)
     }
 
+    /// Expose the 32-byte secret seed. Must NEVER be used for anything other than
+    /// deriving deterministic subkeys (e.g., delivery key) within trusted code in
+    /// this workspace. The raw seed must never leave the process.
+    pub fn secret_bytes(&self) -> [u8; 32] {
+        self.signing.to_bytes()
+    }
+
     pub fn verify(&self, message: &[u8], sig: &Signature) -> bool {
         self.public().verify(message, sig).is_ok()
     }

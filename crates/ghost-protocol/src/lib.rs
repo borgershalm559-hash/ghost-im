@@ -4,11 +4,13 @@ pub mod error;
 pub mod msg_uuid;
 pub mod outer_envelope;
 pub mod sealed_blob;
+pub mod sealed_sender;
 
 pub use error::{ProtoError, Result};
 pub use msg_uuid::MessageUuid;
 pub use outer_envelope::{MsgType, OuterEnvelope, PROTOCOL_VERSION};
 pub use sealed_blob::{PayloadType, SealedBlob};
+pub use sealed_sender::{delivery_public, delivery_secret};
 
 #[cfg(test)]
 mod smoke_tests {
