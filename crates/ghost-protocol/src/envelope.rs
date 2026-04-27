@@ -57,6 +57,30 @@ pub fn wrap_message(
     outer.to_cbor()
 }
 
+/// Like `unwrap_message`, but skips the sender-DK signature verification step.
+///
+/// USE WITH CARE: only appropriate for handshake messages where the inner payload has its own
+/// cryptographic authentication (e.g., MLS Welcome). This is necessary for first-contact flows
+/// where the recipient does not yet have the sender's DK in their local DB.
+pub fn unwrap_message_lenient(
+    wire_bytes: &[u8],
+    recipient_ik: &IdentityKey,
+) -> Result<UnwrappedMessage> {
+    let outer = OuterEnvelope::from_cbor(wire_bytes)?;
+    outer.check_recipient(&recipient_ik.ghost_id())?;
+
+    let recipient_secret = delivery_secret(recipient_ik);
+    let blob_bytes = unseal(&recipient_secret, &outer.sealed_blob)?;
+    let blob = SealedBlob::from_cbor(&blob_bytes)?;
+
+    Ok(UnwrappedMessage {
+        sender_id: blob.sender_id,
+        payload_type: blob.payload_type,
+        payload: blob.payload,
+        msg_uuid: blob.msg_uuid,
+    })
+}
+
 /// Unwrap an incoming envelope: parse, verify recipient, decrypt sealed-sender, parse SealedBlob,
 /// verify sender signature, return plaintext payload + sender info.
 ///
@@ -189,6 +213,32 @@ mod tests {
 
         let err = unwrap_message(&wire, &bob_ik, |_| None).unwrap_err();
         assert!(matches!(err, ProtoError::Invalid(_)));
+    }
+
+    #[test]
+    fn unwrap_lenient_works_without_dk_lookup() {
+        let ((alice_ik, alice_dk), (bob_ik, _)) = alice_and_bob();
+        let alice_id = alice_ik.ghost_id();
+        let bob_id = bob_ik.ghost_id();
+        let bob_delivery = crate::sealed_sender::delivery_public(&bob_ik);
+
+        let wire = wrap_message(
+            &alice_ik,
+            &alice_dk,
+            bob_id,
+            &bob_delivery,
+            MsgType::MlsHandshake,
+            PayloadType::MlsHandshake,
+            b"some welcome bytes".to_vec(),
+            1,
+        )
+        .unwrap();
+
+        // No DK lookup needed.
+        let result = unwrap_message_lenient(&wire, &bob_ik).unwrap();
+        assert_eq!(result.sender_id, alice_id);
+        assert_eq!(result.payload_type, PayloadType::MlsHandshake);
+        assert_eq!(result.payload, b"some welcome bytes");
     }
 
     #[test]

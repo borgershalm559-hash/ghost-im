@@ -11,7 +11,7 @@ pub mod outer_envelope;
 pub mod sealed_blob;
 pub mod sealed_sender;
 
-pub use envelope::{unwrap_message, wrap_message, UnwrappedMessage};
+pub use envelope::{unwrap_message, unwrap_message_lenient, wrap_message, UnwrappedMessage};
 pub use error::{ProtoError, Result};
 pub use key_package::{generate_key_package, populate_initial_keypackages, GHOST_CIPHERSUITE};
 pub use mls_credential::credential_with_key;

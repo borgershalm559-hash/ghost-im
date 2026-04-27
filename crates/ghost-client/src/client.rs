@@ -1,12 +1,14 @@
 //! Client orchestration: opens Identity + Database + Network + Server, runs background tasks.
 
+use crate::error::ClientError;
 use crate::invite::GhostInvite;
 use crate::Result;
 use ghost_core::Fingerprint;
 use ghost_identity::{Identity, IdentityKey};
 use ghost_network::{peer_id_from_ghost_id, Network};
 use ghost_protocol::{
-    generate_key_package, new_provider, wrap_message, MlsSession, MsgType, PayloadType,
+    generate_key_package, new_provider, unwrap_message_lenient, wrap_message, MlsSession, MsgType,
+    PayloadType, UnwrappedMessage,
 };
 use ghost_server::Client as ServerClient;
 use ghost_server::{PresenceState, Server};
@@ -17,7 +19,7 @@ use ghost_storage::{
 use uuid::Uuid;
 use libp2p::{Multiaddr, PeerId};
 use openmls::prelude::tls_codec::{Deserialize as TlsDeserialize, Serialize as TlsSerialize};
-use openmls::prelude::KeyPackageIn;
+use openmls::prelude::{KeyPackageIn, MlsMessageIn};
 use openmls_traits::OpenMlsProvider;
 use rand::RngCore;
 use std::sync::Arc;
@@ -382,6 +384,155 @@ impl Client {
     ) -> Result<Vec<MessageRow>> {
         Ok(self.db.messages().list_for_contact(contact_id, limit, offset)?)
     }
+
+    /// Spawn a background task that drains the Server's inbox and processes incoming envelopes.
+    ///
+    /// Takes ownership of the inner `Server`. Returns a `JoinHandle`; dropping it aborts the task.
+    /// Individual envelope errors are logged via `eprintln!` — one bad message does not kill the
+    /// processor loop.
+    pub async fn start_inbox_processor(&self) -> Result<tokio::task::JoinHandle<()>> {
+        let server = {
+            let mut guard = self.server.lock().await;
+            guard
+                .take()
+                .ok_or_else(|| ClientError::Internal("server already taken for inbox".into()))?
+        };
+
+        let db = self.db.clone();
+        let ik = self.ik.clone();
+
+        let handle = tokio::spawn(async move {
+            let mut server = server;
+            loop {
+                let envelope = match server.next_inbox().await {
+                    Some(e) => e,
+                    None => break,
+                };
+                if let Err(e) = process_envelope(&db, &ik, &envelope.envelope).await {
+                    eprintln!("inbox process error: {e}");
+                }
+            }
+        });
+        Ok(handle)
+    }
+}
+
+async fn process_envelope(
+    db: &Arc<Database>,
+    ik: &Arc<IdentityKey>,
+    envelope_bytes: &[u8],
+) -> Result<()> {
+    // Use lenient unwrap that skips sender-DK signature verification. Required for first-contact
+    // flows where we don't yet have the sender's DK. MLS authentication is the primary security
+    // mechanism; the outer Ed25519 signature is defense-in-depth to revisit in MVP-2.
+    let unwrapped = unwrap_message_lenient(envelope_bytes, ik).map_err(ClientError::Protocol)?;
+
+    match unwrapped.payload_type {
+        PayloadType::AppText => handle_app_text(db, &unwrapped).await,
+        PayloadType::MlsHandshake => handle_mls_handshake(db, &unwrapped).await,
+        other => Err(ClientError::Internal(format!("unsupported payload type: {other:?}"))),
+    }
+}
+
+async fn handle_app_text(db: &Arc<Database>, unwrapped: &UnwrappedMessage) -> Result<()> {
+    let sender_id = unwrapped.sender_id;
+    let now = current_unix_secs();
+
+    let mls_row = db
+        .mls_groups()
+        .load_for_contact(&sender_id)?
+        .ok_or_else(|| ClientError::MlsGroupNotFound(format!("{sender_id}")))?;
+
+    let (provider, mut session) =
+        MlsSession::deserialize_state(&mls_row.state_blob).map_err(ClientError::Protocol)?;
+
+    let plaintext = session
+        .decrypt_app_message(&provider, &unwrapped.payload)
+        .map_err(ClientError::Protocol)?;
+    let text = String::from_utf8_lossy(&plaintext).to_string();
+
+    let msg_uuid = *unwrapped.msg_uuid.as_bytes();
+    db.messages().insert(&MessageRow {
+        msg_uuid,
+        contact_id: sender_id,
+        direction: Direction::Incoming,
+        content_type: 0,
+        content: text,
+        sent_at: now as i64,
+        received_at: Some(now as i64),
+        status: MessageStatus::Delivered,
+        reply_to: None,
+        expires_at: None,
+    })?;
+
+    let new_state = session
+        .serialize_state(&provider)
+        .map_err(ClientError::Protocol)?;
+    db.mls_groups().upsert(&MlsGroupRow {
+        group_id: mls_row.group_id,
+        contact_id: sender_id,
+        state_blob: new_state,
+        current_epoch: session.current_epoch(),
+        created_at: mls_row.created_at,
+        last_updated: now as i64,
+    })?;
+
+    Ok(())
+}
+
+async fn handle_mls_handshake(db: &Arc<Database>, unwrapped: &UnwrappedMessage) -> Result<()> {
+    let sender_id = unwrapped.sender_id;
+    let now = current_unix_secs();
+
+    let provider = new_provider();
+    let welcome_in = MlsMessageIn::tls_deserialize(&mut unwrapped.payload.as_slice())
+        .map_err(|e| ClientError::Internal(format!("welcome deserialize: {e}")))?;
+    let session =
+        MlsSession::join_via_welcome(&provider, welcome_in).map_err(ClientError::Protocol)?;
+
+    // Persist or update contact.
+    let fingerprint = Fingerprint::of(&sender_id).to_string();
+    let contact = Contact {
+        ghost_id: sender_id,
+        display_name: None,
+        local_alias: None,
+        fingerprint,
+        added_at: now as i64,
+        last_endpoint: None,
+        verification: Verification::Unverified,
+        notes: None,
+        blocked: false,
+        dk_pub: None,
+    };
+    let existing = db.contacts().get(&sender_id)?;
+    if existing.is_some() {
+        db.contacts().update(&contact)?;
+    } else {
+        db.contacts().insert(&contact)?;
+    }
+
+    // Persist MLS group state.
+    let state_blob = session
+        .serialize_state(&provider)
+        .map_err(ClientError::Protocol)?;
+    let group_id = session.group_id_bytes();
+    db.mls_groups().upsert(&MlsGroupRow {
+        group_id: bytes_to_array_32(&group_id),
+        contact_id: sender_id,
+        state_blob,
+        current_epoch: session.current_epoch(),
+        created_at: now as i64,
+        last_updated: now as i64,
+    })?;
+
+    Ok(())
+}
+
+fn current_unix_secs() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
 }
 
 fn bytes_to_array_32(b: &[u8]) -> [u8; 32] {
