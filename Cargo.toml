@@ -3,9 +3,10 @@ resolver = "2"
 members = [
     "crates/ghost-core",
     "crates/ghost-identity",
+    "crates/ghost-network",
+    "crates/ghost-identity-cli",
     "crates/ghost-protocol",
     "crates/ghost-storage",
-    "crates/ghost-identity-cli",
 ]
 
 [workspace.package]
@@ -34,6 +35,27 @@ ciborium = "0.2"
 bech32 = "0.11"
 hex = "0.4"
 base64 = "0.22"
+
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+futures = "0.3"
+async-trait = "0.1"
+
+# Networking
+libp2p = { version = "0.56", features = [
+    "tokio",
+    "tcp",
+    "dns",
+    "yamux",
+    "noise",
+    "tls",
+    "quic",
+    "kad",
+    "identify",
+    "request-response",
+    "ed25519",
+    "macros",
+] }
 
 # Errors / utilities
 thiserror = "1.0"
