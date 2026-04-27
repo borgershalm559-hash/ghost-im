@@ -2,6 +2,7 @@
 
 pub mod envelope;
 pub mod error;
+pub mod mls_provider;
 pub mod msg_uuid;
 pub mod outer_envelope;
 pub mod sealed_blob;
@@ -9,6 +10,7 @@ pub mod sealed_sender;
 
 pub use envelope::{unwrap_message, wrap_message, UnwrappedMessage};
 pub use error::{ProtoError, Result};
+pub use mls_provider::{new_provider, GhostMlsProvider};
 pub use msg_uuid::MessageUuid;
 pub use outer_envelope::{MsgType, OuterEnvelope, PROTOCOL_VERSION};
 pub use sealed_blob::{PayloadType, SealedBlob};
