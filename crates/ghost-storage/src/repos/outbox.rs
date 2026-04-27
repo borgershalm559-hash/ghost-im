@@ -51,7 +51,9 @@ impl<'a> OutboxRepo<'a> {
                   LIMIT ?2",
             )?;
             let rows = stmt
-                .query_map(params![now, limit as i64], |row| Ok(Self::row_to_struct(row)))?
+                .query_map(params![now, limit as i64], |row| {
+                    Ok(Self::row_to_struct(row))
+                })?
                 .collect::<std::result::Result<Vec<_>, _>>()?;
             rows.into_iter().collect()
         })
@@ -59,7 +61,10 @@ impl<'a> OutboxRepo<'a> {
 
     pub fn remove(&self, msg_uuid: &[u8; 16]) -> Result<()> {
         self.db.with_tx(|tx| {
-            tx.execute("DELETE FROM outbox WHERE msg_uuid = ?1", params![&msg_uuid[..]])?;
+            tx.execute(
+                "DELETE FROM outbox WHERE msg_uuid = ?1",
+                params![&msg_uuid[..]],
+            )?;
             Ok(())
         })
     }
@@ -174,7 +179,9 @@ mod tests {
     fn record_failure_increments_attempts() {
         let db = fresh_db();
         db.outbox().enqueue(&row(1, 0)).unwrap();
-        db.outbox().record_failure(&[1u8; 16], 500, Some("network down")).unwrap();
+        db.outbox()
+            .record_failure(&[1u8; 16], 500, Some("network down"))
+            .unwrap();
         let due = db.outbox().due(1000, 10).unwrap();
         assert_eq!(due[0].attempts, 1);
         assert_eq!(due[0].next_retry_at, 500);

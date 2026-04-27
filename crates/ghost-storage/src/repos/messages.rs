@@ -245,7 +245,11 @@ mod tests {
             content_type: 0,
             content: format!("hello-{uuid_seed}"),
             sent_at,
-            received_at: if direction == Direction::Incoming { Some(sent_at + 1) } else { None },
+            received_at: if direction == Direction::Incoming {
+                Some(sent_at + 1)
+            } else {
+                None
+            },
             status: MessageStatus::Pending,
             reply_to: None,
             expires_at: None,
@@ -255,8 +259,12 @@ mod tests {
     #[test]
     fn insert_then_list() {
         let (db, contact) = fresh_db_with_contact(1);
-        db.messages().insert(&msg(1, contact, Direction::Outgoing, 100)).unwrap();
-        db.messages().insert(&msg(2, contact, Direction::Incoming, 200)).unwrap();
+        db.messages()
+            .insert(&msg(1, contact, Direction::Outgoing, 100))
+            .unwrap();
+        db.messages()
+            .insert(&msg(2, contact, Direction::Incoming, 200))
+            .unwrap();
         let list = db.messages().list_for_contact(&contact, 100, 0).unwrap();
         assert_eq!(list.len(), 2);
         assert_eq!(list[0].content, "hello-1");
@@ -267,7 +275,9 @@ mod tests {
     fn list_paginates() {
         let (db, contact) = fresh_db_with_contact(2);
         for i in 0..10u8 {
-            db.messages().insert(&msg(i + 1, contact, Direction::Outgoing, i as i64)).unwrap();
+            db.messages()
+                .insert(&msg(i + 1, contact, Direction::Outgoing, i as i64))
+                .unwrap();
         }
         let page = db.messages().list_for_contact(&contact, 3, 5).unwrap();
         assert_eq!(page.len(), 3);
@@ -278,8 +288,12 @@ mod tests {
     #[test]
     fn update_status_changes_field() {
         let (db, contact) = fresh_db_with_contact(3);
-        db.messages().insert(&msg(1, contact, Direction::Outgoing, 0)).unwrap();
-        db.messages().update_status(&[1u8; 16], MessageStatus::Delivered).unwrap();
+        db.messages()
+            .insert(&msg(1, contact, Direction::Outgoing, 0))
+            .unwrap();
+        db.messages()
+            .update_status(&[1u8; 16], MessageStatus::Delivered)
+            .unwrap();
         let list = db.messages().list_for_contact(&contact, 10, 0).unwrap();
         assert_eq!(list[0].status, MessageStatus::Delivered);
     }

@@ -77,12 +77,18 @@ fn alice_and_bob_persist_and_continue_after_restart() {
         let bob_kp_bytes = bob_id.mls_keypackages.first().unwrap().clone();
         let bob_kp_in = KeyPackageIn::tls_deserialize(&mut bob_kp_bytes.as_slice()).unwrap();
         let bob_kp = bob_kp_in
-            .validate(alice_provider.crypto(), openmls::versions::ProtocolVersion::Mls10)
+            .validate(
+                alice_provider.crypto(),
+                openmls::versions::ProtocolVersion::Mls10,
+            )
             .expect("validate bob KP");
 
-        let mut alice_session =
-            MlsSession::create(&alice_provider, &alice_id.identity_key, &alice_id.device_key)
-                .unwrap();
+        let mut alice_session = MlsSession::create(
+            &alice_provider,
+            &alice_id.identity_key,
+            &alice_id.device_key,
+        )
+        .unwrap();
         let alice_signer = MlsSession::signer_from_dk(&alice_id.device_key);
         let invite = alice_session
             .add_member(&alice_provider, &alice_signer, bob_kp)

@@ -191,7 +191,11 @@ mod tests {
     fn load_for_unknown_contact_returns_none() {
         let db = fresh_db();
         let contact = GhostId::from_bytes([0xff; 32]);
-        assert!(db.mls_groups().load_for_contact(&contact).unwrap().is_none());
+        assert!(db
+            .mls_groups()
+            .load_for_contact(&contact)
+            .unwrap()
+            .is_none());
     }
 
     #[test]
@@ -224,6 +228,10 @@ mod tests {
             })
             .unwrap();
         assert!(db.mls_groups().delete_for_contact(&contact).unwrap());
-        assert!(db.mls_groups().load_for_contact(&contact).unwrap().is_none());
+        assert!(db
+            .mls_groups()
+            .load_for_contact(&contact)
+            .unwrap()
+            .is_none());
     }
 }

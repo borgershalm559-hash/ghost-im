@@ -135,7 +135,10 @@ impl<'a> ContactsRepo<'a> {
     /// Delete a contact by GhostId. Returns true iff a row was deleted.
     pub fn delete(&self, id: &GhostId) -> Result<bool> {
         self.db.with_tx(|tx| {
-            let n = tx.execute("DELETE FROM contacts WHERE ghost_id = ?1", params![id.as_bytes()])?;
+            let n = tx.execute(
+                "DELETE FROM contacts WHERE ghost_id = ?1",
+                params![id.as_bytes()],
+            )?;
             Ok(n > 0)
         })
     }

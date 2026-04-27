@@ -272,8 +272,8 @@ impl MlsSession {
     /// The caller is responsible for keeping the provider alive alongside the session — they
     /// form a pair that must be used together.
     pub fn deserialize_state(blob: &[u8]) -> crate::Result<(GhostMlsProvider, Self)> {
-        let state: PersistedMlsState = ciborium::from_reader(blob)
-            .map_err(|e| ProtoError::CborDecode(e.to_string()))?;
+        let state: PersistedMlsState =
+            ciborium::from_reader(blob).map_err(|e| ProtoError::CborDecode(e.to_string()))?;
 
         // Reconstruct MemoryStorage from the serialized blob.
         let restored_storage =
@@ -284,12 +284,15 @@ impl MlsSession {
         // MemoryStorage.values is pub RwLock<HashMap<..>>, so we can overwrite in-place.
         let provider = openmls_rust_crypto::OpenMlsRustCrypto::default();
         {
-            let restored_map = restored_storage.values.into_inner().map_err(|e| {
-                ProtoError::Mls(format!("restored storage lock poisoned: {e}"))
-            })?;
-            let mut dest = provider.storage().values.write().map_err(|e| {
-                ProtoError::Mls(format!("provider storage lock poisoned: {e}"))
-            })?;
+            let restored_map = restored_storage
+                .values
+                .into_inner()
+                .map_err(|e| ProtoError::Mls(format!("restored storage lock poisoned: {e}")))?;
+            let mut dest = provider
+                .storage()
+                .values
+                .write()
+                .map_err(|e| ProtoError::Mls(format!("provider storage lock poisoned: {e}")))?;
             *dest = restored_map;
         }
 

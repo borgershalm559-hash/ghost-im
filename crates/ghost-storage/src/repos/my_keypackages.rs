@@ -168,7 +168,9 @@ mod tests {
     fn mark_consumed_excludes_from_list() {
         let db = fresh_db();
         db.my_keypackages().insert(&fake_kp(1, false, 0)).unwrap();
-        db.my_keypackages().mark_consumed(&[1u8; 32], 12345).unwrap();
+        db.my_keypackages()
+            .mark_consumed(&[1u8; 32], 12345)
+            .unwrap();
         let avail = db.my_keypackages().list_available_one_time().unwrap();
         assert!(avail.is_empty());
     }
@@ -178,7 +180,10 @@ mod tests {
         let db = fresh_db();
         db.my_keypackages().insert(&fake_kp(1, false, 0)).unwrap();
         db.my_keypackages().mark_consumed(&[1u8; 32], 1).unwrap();
-        let err = db.my_keypackages().mark_consumed(&[1u8; 32], 2).unwrap_err();
+        let err = db
+            .my_keypackages()
+            .mark_consumed(&[1u8; 32], 2)
+            .unwrap_err();
         assert!(matches!(err, StorageError::NotFound(_)));
     }
 }

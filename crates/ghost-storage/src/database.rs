@@ -126,11 +126,13 @@ mod tests {
         {
             let db = Database::open_encrypted(&path, &key).unwrap();
             db.with_conn(|c| {
-                c.execute("CREATE TABLE t (v INTEGER)", []).map_err(Into::into)
+                c.execute("CREATE TABLE t (v INTEGER)", [])
+                    .map_err(Into::into)
             })
             .unwrap();
             db.with_tx(|tx| {
-                tx.execute("INSERT INTO t (v) VALUES (?1)", [42_i64]).map_err(Into::into)
+                tx.execute("INSERT INTO t (v) VALUES (?1)", [42_i64])
+                    .map_err(Into::into)
             })
             .unwrap();
         }
@@ -139,7 +141,8 @@ mod tests {
             let db = Database::open_encrypted(&path, &key).unwrap();
             let v: i64 = db
                 .with_conn(|c| {
-                    c.query_row("SELECT v FROM t", [], |r| r.get(0)).map_err(Into::into)
+                    c.query_row("SELECT v FROM t", [], |r| r.get(0))
+                        .map_err(Into::into)
                 })
                 .unwrap();
             assert_eq!(v, 42);

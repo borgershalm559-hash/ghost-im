@@ -64,7 +64,10 @@ mod tests {
     fn set_then_get() {
         let db = fresh_db();
         db.settings().set("retention", "30d").unwrap();
-        assert_eq!(db.settings().get("retention").unwrap().as_deref(), Some("30d"));
+        assert_eq!(
+            db.settings().get("retention").unwrap().as_deref(),
+            Some("30d")
+        );
     }
 
     #[test]
