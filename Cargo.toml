@@ -3,13 +3,14 @@ resolver = "2"
 members = [
     "crates/ghost-core",
     "crates/ghost-identity",
+    "crates/ghost-protocol",
     "crates/ghost-identity-cli",
 ]
 
 [workspace.package]
 version = "0.0.1"
 edition = "2021"
-rust-version = "1.85"
+rust-version = "1.87"
 license = "AGPL-3.0-only"
 
 [workspace.dependencies]
@@ -39,6 +40,14 @@ directories = "5.0"
 
 # OS keystore (Linux Secret Service / Windows Credential Manager / macOS Keychain)
 keyring = { version = "3.0", default-features = false, features = ["apple-native", "windows-native", "linux-native-sync-persistent"] }
+
+# MLS (RFC 9420)
+openmls = { version = "0.8", features = ["test-utils"] }
+openmls_rust_crypto = "0.5"
+openmls_traits = "0.5"
+
+# Identifiers
+uuid = { version = "1.10", features = ["v7", "serde"] }
 
 # CLI
 clap = { version = "4.5", features = ["derive"] }
