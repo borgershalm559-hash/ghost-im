@@ -1,7 +1,7 @@
-//! Plan 04 deliverable: two Network instances on loopback exchange bytes.
+//! Plan 05 Task 1: two Network instances on loopback using request/response API.
 
 use ghost_identity::IdentityKey;
-use ghost_network::{InboundEvent, Network};
+use ghost_network::Network;
 use libp2p::Multiaddr;
 use std::time::Duration;
 use tokio::time::timeout;
@@ -30,27 +30,55 @@ async fn alice_and_bob_exchange_bytes() {
     let bob_addr = bob_addrs.into_iter().next().unwrap();
     println!("bob address: {bob_addr}");
 
-    // Alice sends bytes to Bob with explicit endpoint (no DHT in this test).
     let payload = b"hello bob from alice".to_vec();
-    alice
-        .send_to(bob_peer_id, Some(bob_addr), payload.clone())
-        .await
-        .expect("alice send");
 
-    // Bob receives.
-    let event = timeout(Duration::from_secs(10), bob.next_inbound())
-        .await
-        .expect("inbound timeout")
-        .expect("bob received None");
-    match event {
-        InboundEvent::Message {
-            sender,
-            payload: rx_payload,
-        } => {
-            assert_eq!(sender, alice_peer_id, "sender PeerId must match Alice");
-            assert_eq!(rx_payload, payload, "payload bytes must round-trip");
-        }
-    }
+    // Drive both sides concurrently via select!:
+    //   - Alice sends a request (send_to = request + discard response)
+    //   - Bob receives InboundRequest, verifies it, and responds
+    //
+    // We use a flag to track which side is done. When Bob responds first,
+    // Alice's future unblocks; when Alice sends first, Bob receives.
+    let alice_done = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let bob_done = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+
+    let alice_done2 = alice_done.clone();
+    let bob_done2 = bob_done.clone();
+    let payload_for_alice = payload.clone();
+    let payload_for_bob = payload.clone();
+
+    // Alice's future: send request and wait.
+    let alice_fut = async move {
+        alice
+            .send_to(bob_peer_id, Some(bob_addr), payload_for_alice)
+            .await
+            .expect("alice send");
+        alice_done2.store(true, std::sync::atomic::Ordering::SeqCst);
+    };
+
+    // Bob's future: receive request, verify, respond.
+    let bob_fut = async move {
+        let req = timeout(Duration::from_secs(10), bob.next_request())
+            .await
+            .expect("bob inbound timeout")
+            .expect("bob received None");
+        assert_eq!(req.sender, alice_peer_id, "sender PeerId must match Alice");
+        assert_eq!(req.payload, payload_for_bob, "payload bytes must round-trip");
+        bob.respond(req.response, Vec::new())
+            .await
+            .expect("bob respond");
+        bob_done2.store(true, std::sync::atomic::Ordering::SeqCst);
+    };
+
+    // Run both concurrently. Both must complete within the deadline.
+    timeout(
+        Duration::from_secs(15),
+        futures::future::join(alice_fut, bob_fut),
+    )
+    .await
+    .expect("exchange timed out");
+
+    assert!(alice_done.load(std::sync::atomic::Ordering::SeqCst));
+    assert!(bob_done.load(std::sync::atomic::Ordering::SeqCst));
 }
 
 async fn wait_for_addrs(net: &Network, deadline: Duration) -> Vec<Multiaddr> {

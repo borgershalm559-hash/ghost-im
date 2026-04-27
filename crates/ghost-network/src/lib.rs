@@ -11,7 +11,7 @@ pub use address_record::AddressRecord;
 pub use behaviour::{GhostBehaviour, GhostMessageCodec, GHOST_PROTOCOL};
 pub use error::{NetworkError, Result};
 pub use identity::{ghost_id_from_peer_id, libp2p_keypair_from_ik, peer_id_from_ghost_id};
-pub use network::{InboundEvent, Network};
+pub use network::{InboundRequest, Network, ResponseHandle};
 pub use presence_record::PresenceRecord;
 
 #[cfg(test)]

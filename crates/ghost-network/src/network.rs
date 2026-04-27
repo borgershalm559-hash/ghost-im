@@ -12,8 +12,11 @@ use futures::StreamExt;
 use ghost_core::GhostId;
 use ghost_identity::IdentityKey;
 use libp2p::{
-    core::transport::ListenerId, kad, request_response, swarm::SwarmEvent, Multiaddr, PeerId,
-    Swarm, SwarmBuilder,
+    core::{transport::ListenerId, ConnectedPoint},
+    kad,
+    request_response,
+    swarm::SwarmEvent,
+    Multiaddr, PeerId, Swarm, SwarmBuilder,
 };
 use std::collections::HashMap;
 use std::time::Duration;
@@ -29,11 +32,15 @@ pub(crate) enum Command {
         addr: Multiaddr,
         reply: oneshot::Sender<Result<ListenerId>>,
     },
-    SendBytes {
+    Request {
         target_peer: PeerId,
         target_addr: Option<Multiaddr>,
         bytes: Vec<u8>,
-        reply: oneshot::Sender<Result<()>>,
+        reply: oneshot::Sender<Result<Vec<u8>>>,
+    },
+    Respond {
+        channel: request_response::ResponseChannel<Vec<u8>>,
+        bytes: Vec<u8>,
     },
     PutAddressRecord {
         record: AddressRecord,
@@ -49,14 +56,28 @@ pub(crate) enum Command {
 }
 
 // ---------------------------------------------------------------------------
-// Public inbound event type
+// Public inbound request/response types
 // ---------------------------------------------------------------------------
 
-/// Events delivered from the network to the application layer.
-#[derive(Debug)]
-pub enum InboundEvent {
-    /// A raw byte message arrived from a remote peer.
-    Message { sender: PeerId, payload: Vec<u8> },
+/// Opaque handle used to send a response back to the requesting peer.
+pub struct ResponseHandle {
+    pub(crate) inner: request_response::ResponseChannel<Vec<u8>>,
+}
+
+/// An inbound request awaiting a response from the local node.
+pub struct InboundRequest {
+    pub sender: PeerId,
+    pub payload: Vec<u8>,
+    pub response: ResponseHandle,
+}
+
+impl std::fmt::Debug for InboundRequest {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("InboundRequest")
+            .field("sender", &self.sender)
+            .field("payload_len", &self.payload.len())
+            .finish()
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -68,7 +89,7 @@ pub enum InboundEvent {
 /// Dropping this value stops the event loop.
 pub struct Network {
     cmd_tx: mpsc::Sender<Command>,
-    inbound_rx: mpsc::Receiver<InboundEvent>,
+    request_rx: mpsc::Receiver<InboundRequest>,
     local_peer_id: PeerId,
     // Keeps the spawned task alive for as long as the Network is alive.
     _task: tokio::task::JoinHandle<()>,
@@ -100,13 +121,13 @@ impl Network {
             .build();
 
         let (cmd_tx, cmd_rx) = mpsc::channel::<Command>(64);
-        let (inbound_tx, inbound_rx) = mpsc::channel::<InboundEvent>(64);
+        let (request_tx, request_rx) = mpsc::channel::<InboundRequest>(64);
 
-        let task = tokio::spawn(run_event_loop(swarm, cmd_rx, inbound_tx));
+        let task = tokio::spawn(run_event_loop(swarm, cmd_rx, request_tx));
 
         Ok(Self {
             cmd_tx,
-            inbound_rx,
+            request_rx,
             local_peer_id,
             _task: task,
         })
@@ -127,20 +148,20 @@ impl Network {
         rx.await.map_err(|_| NetworkError::ChannelClosed)?
     }
 
-    /// Send raw bytes to a remote peer.
+    /// Send a request to a remote peer and await the response bytes.
     ///
-    /// If `target_addr` is provided, it is added to Kademlia's address book and
-    /// the swarm will dial the peer before sending. If the peer is already
-    /// connected, the request is sent immediately.
-    pub async fn send_to(
+    /// If `target_addr` is provided it is added to Kademlia's address book so
+    /// the swarm can dial the peer. libp2p's request-response layer manages
+    /// the dial and queues the request internally until the connection is up.
+    pub async fn request(
         &self,
         target_peer: PeerId,
         target_addr: Option<Multiaddr>,
         bytes: Vec<u8>,
-    ) -> Result<()> {
+    ) -> Result<Vec<u8>> {
         let (tx, rx) = oneshot::channel();
         self.cmd_tx
-            .send(Command::SendBytes {
+            .send(Command::Request {
                 target_peer,
                 target_addr,
                 bytes,
@@ -151,9 +172,33 @@ impl Network {
         rx.await.map_err(|_| NetworkError::ChannelClosed)?
     }
 
-    /// Receive the next inbound event, or `None` if the event loop has stopped.
-    pub async fn next_inbound(&mut self) -> Option<InboundEvent> {
-        self.inbound_rx.recv().await
+    /// Receive the next inbound request, or `None` if the event loop has stopped.
+    pub async fn next_request(&mut self) -> Option<InboundRequest> {
+        self.request_rx.recv().await
+    }
+
+    /// Send a response to an inbound request.
+    pub async fn respond(&self, handle: ResponseHandle, bytes: Vec<u8>) -> Result<()> {
+        self.cmd_tx
+            .send(Command::Respond {
+                channel: handle.inner,
+                bytes,
+            })
+            .await
+            .map_err(|_| NetworkError::ChannelClosed)
+    }
+
+    /// Fire-and-forget send. Sends a request to the peer and discards the response.
+    ///
+    /// If `target_addr` is provided it is registered so the swarm can dial the peer.
+    pub async fn send_to(
+        &self,
+        target_peer: PeerId,
+        target_addr: Option<Multiaddr>,
+        bytes: Vec<u8>,
+    ) -> Result<()> {
+        let _ = self.request(target_peer, target_addr, bytes).await?;
+        Ok(())
     }
 
     /// Publish an `AddressRecord` to the Kademlia DHT.
@@ -198,15 +243,18 @@ impl Network {
 // Event loop (runs inside a tokio task)
 // ---------------------------------------------------------------------------
 
-/// One outbound send that is waiting for the dialled peer to connect.
-type PendingSend = (Vec<u8>, oneshot::Sender<Result<()>>);
+/// A queued outbound request waiting for the connection to be established.
+type PendingRequest = (Vec<u8>, oneshot::Sender<Result<Vec<u8>>>);
 
 /// State tracked between iterations of the select! loop.
 struct LoopState {
     local_addrs: Vec<Multiaddr>,
-    /// Bytes queued for peers we are currently dialling.
-    /// On `ConnectionEstablished` we drain the queue and send the messages.
-    pending_sends: HashMap<PeerId, Vec<PendingSend>>,
+    /// Requests queued for peers we are currently dialling.
+    /// Drained into `messages.send_request` on `ConnectionEstablished`.
+    pending_dials: HashMap<PeerId, Vec<PendingRequest>>,
+    /// Active outbound requests awaiting a response from the remote peer.
+    pending_requests:
+        HashMap<request_response::OutboundRequestId, oneshot::Sender<Result<Vec<u8>>>>,
     pending_puts: HashMap<kad::QueryId, oneshot::Sender<Result<()>>>,
     pending_gets: HashMap<kad::QueryId, oneshot::Sender<Result<Option<AddressRecord>>>>,
 }
@@ -215,7 +263,8 @@ impl LoopState {
     fn new() -> Self {
         Self {
             local_addrs: Vec::new(),
-            pending_sends: HashMap::new(),
+            pending_dials: HashMap::new(),
+            pending_requests: HashMap::new(),
             pending_puts: HashMap::new(),
             pending_gets: HashMap::new(),
         }
@@ -225,7 +274,7 @@ impl LoopState {
 async fn run_event_loop(
     mut swarm: Swarm<GhostBehaviour>,
     mut cmd_rx: mpsc::Receiver<Command>,
-    inbound_tx: mpsc::Sender<InboundEvent>,
+    request_tx: mpsc::Sender<InboundRequest>,
 ) {
     let mut state = LoopState::new();
 
@@ -236,7 +285,7 @@ async fn run_event_loop(
                 handle_command(cmd, &mut swarm, &mut state);
             }
             event = swarm.select_next_some() => {
-                handle_swarm_event(event, &mut swarm, &mut state, &inbound_tx).await;
+                handle_swarm_event(event, &mut swarm, &mut state, &request_tx).await;
             }
         }
     }
@@ -251,40 +300,29 @@ fn handle_command(cmd: Command, swarm: &mut Swarm<GhostBehaviour>, state: &mut L
             let _ = reply.send(res);
         }
 
-        Command::SendBytes {
+        Command::Request {
             target_peer,
             target_addr,
             bytes,
             reply,
         } => {
             if let Some(addr) = target_addr {
-                // Register the address in Kademlia and dial the peer.
-                // The actual send is deferred until ConnectionEstablished.
+                // Register the address in Kademlia so `handle_pending_outbound_connection`
+                // can supply it when request-response dials the peer.
                 swarm.behaviour_mut().kad.add_address(&target_peer, addr);
-                state
-                    .pending_sends
-                    .entry(target_peer)
-                    .or_default()
-                    .push((bytes, reply));
-                if let Err(e) = swarm.dial(target_peer) {
-                    // Drain the pending queue and report the error.
-                    if let Some(queue) = state.pending_sends.remove(&target_peer) {
-                        for (_, r) in queue {
-                            let _ = r.send(Err(NetworkError::DialFailed {
-                                peer: target_peer.to_string(),
-                                detail: e.to_string(),
-                            }));
-                        }
-                    }
-                }
-            } else {
-                // Peer should already be connected; fire and forget.
-                swarm
-                    .behaviour_mut()
-                    .messages
-                    .send_request(&target_peer, bytes);
-                let _ = reply.send(Ok(()));
             }
+            // `send_request` manages the dial internally using addresses from
+            // all behaviour's `handle_pending_outbound_connection`. Failures
+            // come back as `Event::OutboundFailure` and are handled below.
+            let request_id = swarm
+                .behaviour_mut()
+                .messages
+                .send_request(&target_peer, bytes);
+            state.pending_requests.insert(request_id, reply);
+        }
+
+        Command::Respond { channel, bytes } => {
+            let _ = swarm.behaviour_mut().messages.send_response(channel, bytes);
         }
 
         Command::PutAddressRecord { record, reply } => {
@@ -309,8 +347,8 @@ fn handle_command(cmd: Command, swarm: &mut Swarm<GhostBehaviour>, state: &mut L
                             state.pending_puts.insert(qid, reply);
                         }
                         Err(e) => {
-                            let _ =
-                                reply.send(Err(NetworkError::DhtQuery(format!("put_record: {e}"))));
+                            let _ = reply
+                                .send(Err(NetworkError::DhtQuery(format!("put_record: {e}"))));
                         }
                     }
                 }
@@ -336,25 +374,36 @@ async fn handle_swarm_event(
     event: SwarmEvent<GhostBehaviourEvent>,
     swarm: &mut Swarm<GhostBehaviour>,
     state: &mut LoopState,
-    inbound_tx: &mpsc::Sender<InboundEvent>,
+    request_tx: &mpsc::Sender<InboundRequest>,
 ) {
     match event {
         SwarmEvent::NewListenAddr { address, .. } => {
             state.local_addrs.push(address);
         }
 
-        SwarmEvent::ConnectionEstablished { peer_id, .. } => {
-            // Flush any messages queued while dialling.
-            if let Some(queue) = state.pending_sends.remove(&peer_id) {
-                for (bytes, reply) in queue {
-                    swarm.behaviour_mut().messages.send_request(&peer_id, bytes);
-                    let _ = reply.send(Ok(()));
+        SwarmEvent::ConnectionEstablished {
+            peer_id,
+            endpoint,
+            ..
+        } => {
+            // Flush queued requests only when OUR dial succeeded (we are the
+            // dialer). Inbound connections (from the remote dialling us) do not
+            // correspond to our `pending_dials` queue.
+            if matches!(endpoint, ConnectedPoint::Dialer { .. }) {
+                if let Some(queue) = state.pending_dials.remove(&peer_id) {
+                    for (bytes, reply) in queue {
+                        let request_id = swarm
+                            .behaviour_mut()
+                            .messages
+                            .send_request(&peer_id, bytes);
+                        state.pending_requests.insert(request_id, reply);
+                    }
                 }
             }
         }
 
         // ----------------------------------------------------------------
-        // request-response: incoming message from a remote peer
+        // request-response: inbound request from a remote peer
         // ----------------------------------------------------------------
         SwarmEvent::Behaviour(GhostBehaviourEvent::Messages(
             request_response::Event::Message {
@@ -366,17 +415,45 @@ async fn handle_swarm_event(
                 ..
             },
         )) => {
-            // Send an empty ACK response so the remote doesn't time out.
-            let _ = swarm
-                .behaviour_mut()
-                .messages
-                .send_response(channel, Vec::new());
-            let _ = inbound_tx
-                .send(InboundEvent::Message {
-                    sender: peer,
-                    payload: request,
-                })
-                .await;
+            let inbound = InboundRequest {
+                sender: peer,
+                payload: request,
+                response: ResponseHandle { inner: channel },
+            };
+            let _ = request_tx.send(inbound).await;
+        }
+
+        // ----------------------------------------------------------------
+        // request-response: response from a remote peer
+        // ----------------------------------------------------------------
+        SwarmEvent::Behaviour(GhostBehaviourEvent::Messages(
+            request_response::Event::Message {
+                message:
+                    request_response::Message::Response {
+                        request_id,
+                        response,
+                    },
+                ..
+            },
+        )) => {
+            if let Some(reply) = state.pending_requests.remove(&request_id) {
+                let _ = reply.send(Ok(response));
+            }
+        }
+
+        // ----------------------------------------------------------------
+        // request-response: outbound failure
+        // ----------------------------------------------------------------
+        SwarmEvent::Behaviour(GhostBehaviourEvent::Messages(
+            request_response::Event::OutboundFailure {
+                request_id, error, ..
+            },
+        )) => {
+            if let Some(reply) = state.pending_requests.remove(&request_id) {
+                let _ = reply.send(Err(NetworkError::Transport(format!(
+                    "outbound failure: {error}"
+                ))));
+            }
         }
 
         // ----------------------------------------------------------------
