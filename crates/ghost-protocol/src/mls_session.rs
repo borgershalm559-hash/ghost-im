@@ -49,6 +49,39 @@ impl MlsSession {
     }
 }
 
+/// Result of inviting a new member: the Welcome (to be sent to the invitee out-of-band)
+/// plus the Commit (which the inviter applies locally — handled inside this method).
+pub struct InviteResult {
+    pub welcome: MlsMessageOut,
+    pub commit: MlsMessageOut,
+}
+
+impl MlsSession {
+    /// Invite a new member by their KeyPackage. Produces a Welcome the invitee can use to join,
+    /// and a Commit message that — in larger groups — would be broadcast to other members.
+    /// In our 1-on-1 case there are no other members yet, so the Commit is mostly bookkeeping.
+    ///
+    /// openmls 0.8 `add_members` returns `(commit, welcome, Option<GroupInfo>)`.
+    pub fn add_member(
+        &mut self,
+        provider: &GhostMlsProvider,
+        signer: &SignatureKeyPair,
+        invitee_kp: KeyPackage,
+    ) -> Result<InviteResult> {
+        let (commit, welcome, _group_info) = self
+            .group
+            .add_members(provider, signer, &[invitee_kp])
+            .map_err(|e| ProtoError::Mls(format!("add member: {e}")))?;
+
+        // Apply the membership change locally so our state advances to epoch 1.
+        self.group
+            .merge_pending_commit(provider)
+            .map_err(|e| ProtoError::Mls(format!("merge commit: {e}")))?;
+
+        Ok(InviteResult { welcome, commit })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -61,5 +94,36 @@ mod tests {
         let dk = DeviceKey::generate(&ik);
         let session = MlsSession::create(&provider, &ik, &dk).unwrap();
         assert_eq!(session.epoch(), 0);
+    }
+}
+
+#[cfg(test)]
+mod add_member_tests {
+    use super::*;
+    use crate::key_package::generate_key_package;
+    use crate::mls_provider::new_provider;
+
+    #[test]
+    fn add_member_advances_epoch() {
+        let alice_provider = new_provider();
+        let alice_ik = IdentityKey::generate();
+        let alice_dk = DeviceKey::generate(&alice_ik);
+        let mut alice = MlsSession::create(&alice_provider, &alice_ik, &alice_dk).unwrap();
+        assert_eq!(alice.epoch(), 0);
+
+        // Bob (separate provider — represents a separate process/machine).
+        let bob_provider = new_provider();
+        let bob_ik = IdentityKey::generate();
+        let bob_dk = DeviceKey::generate(&bob_ik);
+        let bob_kp = generate_key_package(&bob_provider, &bob_ik, &bob_dk).unwrap();
+
+        let alice_signer = MlsSession::signer_from_dk(&alice_dk);
+        let invite = alice
+            .add_member(&alice_provider, &alice_signer, bob_kp)
+            .unwrap();
+        assert_eq!(alice.epoch(), 1);
+
+        let _ = invite.welcome;
+        let _ = invite.commit;
     }
 }
