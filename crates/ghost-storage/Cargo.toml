@@ -1,0 +1,29 @@
+[package]
+name = "ghost-storage"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Ghost storage: SQLCipher-encrypted SQLite, schema, migrations, repositories."
+
+[dependencies]
+ghost-core     = { path = "../ghost-core" }
+ghost-identity = { path = "../ghost-identity" }
+
+rusqlite = { workspace = true }
+hkdf = { workspace = true }
+sha2 = { workspace = true }
+zeroize = { workspace = true }
+hex = { workspace = true }
+uuid = { workspace = true }
+
+thiserror = { workspace = true }
+
+[dev-dependencies]
+ghost-protocol = { path = "../ghost-protocol" }
+tempfile = { workspace = true }
+proptest = { workspace = true }
+openmls = { workspace = true }
+openmls_rust_crypto = { workspace = true }
+openmls_traits = { workspace = true }
+openmls_basic_credential = { workspace = true }
