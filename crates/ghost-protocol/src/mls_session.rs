@@ -228,6 +228,93 @@ impl MlsSession {
     }
 }
 
+impl MlsSession {
+    /// Group ID as raw bytes — useful for keying persisted state.
+    pub fn group_id_bytes(&self) -> Vec<u8> {
+        self.group.group_id().as_slice().to_vec()
+    }
+
+    /// Current epoch number — alias for `epoch()`, named for clarity in persistence contexts.
+    pub fn current_epoch(&self) -> u64 {
+        self.epoch()
+    }
+
+    /// Serialize the full MLS session state (provider storage + group ID) to an opaque blob.
+    ///
+    /// The blob can be stored in ghost-storage's `state_blob` column and later passed to
+    /// [`deserialize_state`] to reconstruct a fully functional `MlsSession`.
+    ///
+    /// Uses `MemoryStorage::serialize` (available via openmls' `test-utils` feature) to
+    /// produce a compact binary representation of all key material, then wraps it with the
+    /// group ID in a CBOR envelope.
+    pub fn serialize_state(&self, provider: &GhostMlsProvider) -> crate::Result<Vec<u8>> {
+        // Serialize the MemoryStorage to bytes.
+        let mut storage_bytes: Vec<u8> = Vec::new();
+        provider
+            .storage()
+            .serialize(&mut storage_bytes)
+            .map_err(|e| ProtoError::Mls(format!("serialize storage: {e}")))?;
+
+        let state = PersistedMlsState {
+            storage_blob: storage_bytes,
+            group_id: self.group_id_bytes(),
+        };
+
+        let mut buf = Vec::new();
+        ciborium::into_writer(&state, &mut buf)
+            .map_err(|e| ProtoError::CborEncode(e.to_string()))?;
+        Ok(buf)
+    }
+
+    /// Restore an `MlsSession` from a blob produced by [`serialize_state`].
+    ///
+    /// Returns both the reconstructed provider (with all key material restored) and the session.
+    /// The caller is responsible for keeping the provider alive alongside the session — they
+    /// form a pair that must be used together.
+    pub fn deserialize_state(blob: &[u8]) -> crate::Result<(GhostMlsProvider, Self)> {
+        let state: PersistedMlsState = ciborium::from_reader(blob)
+            .map_err(|e| ProtoError::CborDecode(e.to_string()))?;
+
+        // Reconstruct MemoryStorage from the serialized blob.
+        let restored_storage =
+            openmls_rust_crypto::MemoryStorage::deserialize(&mut state.storage_blob.as_slice())
+                .map_err(|e| ProtoError::Mls(format!("deserialize storage: {e}")))?;
+
+        // Build a fresh provider, then replace its storage contents with the restored map.
+        // MemoryStorage.values is pub RwLock<HashMap<..>>, so we can overwrite in-place.
+        let provider = openmls_rust_crypto::OpenMlsRustCrypto::default();
+        {
+            let restored_map = restored_storage.values.into_inner().map_err(|e| {
+                ProtoError::Mls(format!("restored storage lock poisoned: {e}"))
+            })?;
+            let mut dest = provider.storage().values.write().map_err(|e| {
+                ProtoError::Mls(format!("provider storage lock poisoned: {e}"))
+            })?;
+            *dest = restored_map;
+        }
+
+        // Load the MlsGroup from the now-populated provider.
+        let group_id = openmls::prelude::GroupId::from_slice(&state.group_id);
+        let group = openmls::prelude::MlsGroup::load(provider.storage(), &group_id)
+            .map_err(|e| ProtoError::Mls(format!("load group: {e}")))?
+            .ok_or_else(|| ProtoError::Mls("group not found in restored storage".into()))?;
+
+        Ok((provider, Self { group }))
+    }
+}
+
+/// CBOR envelope for persisted MLS state.
+///
+/// Wraps the raw `MemoryStorage` bytes together with the group ID so that
+/// `deserialize_state` knows which group to load after restoring the provider.
+#[derive(serde::Serialize, serde::Deserialize)]
+struct PersistedMlsState {
+    /// Bytes produced by `MemoryStorage::serialize` — contains all MLS key material.
+    storage_blob: Vec<u8>,
+    /// Raw group ID bytes (`GroupId::as_slice()`), used to call `MlsGroup::load`.
+    group_id: Vec<u8>,
+}
+
 #[cfg(test)]
 mod app_message_tests {
     use super::*;
@@ -302,5 +389,97 @@ mod app_message_tests {
             Ok(Err(_)) => { /* returned error — tampered bytes rejected */ }
             Ok(Ok(_)) => panic!("expected decryption to fail on tampered ciphertext"),
         }
+    }
+}
+
+#[cfg(test)]
+mod state_persist_tests {
+    use super::*;
+    use crate::key_package::generate_key_package;
+    use crate::mls_provider::new_provider;
+    use openmls::prelude::tls_codec::{Deserialize as TlsDeserialize, Serialize as TlsSerialize};
+    use openmls::prelude::MlsMessageIn;
+
+    #[test]
+    fn alice_serialize_deserialize_continue_messaging() {
+        // --- Setup: Alice creates group, invites Bob ---
+        let alice_provider = new_provider();
+        let alice_ik = ghost_identity::IdentityKey::generate();
+        let alice_dk = ghost_identity::DeviceKey::generate(&alice_ik);
+        let mut alice = MlsSession::create(&alice_provider, &alice_ik, &alice_dk).unwrap();
+        let alice_signer = MlsSession::signer_from_dk(&alice_dk);
+
+        let bob_provider = new_provider();
+        let bob_ik = ghost_identity::IdentityKey::generate();
+        let bob_dk = ghost_identity::DeviceKey::generate(&bob_ik);
+        let bob_kp = generate_key_package(&bob_provider, &bob_ik, &bob_dk).unwrap();
+        let bob_signer = MlsSession::signer_from_dk(&bob_dk);
+
+        let invite = alice
+            .add_member(&alice_provider, &alice_signer, bob_kp)
+            .unwrap();
+        let welcome_bytes = invite.welcome.tls_serialize_detached().unwrap();
+        let welcome_in = MlsMessageIn::tls_deserialize(&mut welcome_bytes.as_slice()).unwrap();
+        let mut bob = MlsSession::join_via_welcome(&bob_provider, welcome_in).unwrap();
+
+        // --- Warmup message before snapshot ---
+        let wire = alice
+            .encrypt_app_message(&alice_provider, &alice_signer, b"warmup")
+            .unwrap();
+        let _ = bob.decrypt_app_message(&bob_provider, &wire).unwrap();
+        let pre_epoch = alice.current_epoch();
+
+        // --- Snapshot Alice ---
+        let alice_state_bytes = alice.serialize_state(&alice_provider).unwrap();
+
+        // Drop Alice + her provider (simulate process restart).
+        drop(alice);
+        drop(alice_provider);
+
+        // --- Restore Alice ---
+        let (alice_provider_restored, mut alice_restored) =
+            MlsSession::deserialize_state(&alice_state_bytes).unwrap();
+        assert_eq!(alice_restored.current_epoch(), pre_epoch);
+
+        // Re-store Alice's signer key into the restored provider so encrypt can find it.
+        alice_signer
+            .store(alice_provider_restored.storage())
+            .map_err(|e| ProtoError::Mls(format!("re-store signer: {e}")))
+            .unwrap();
+
+        // --- Continue messaging: Alice (restored) -> Bob ---
+        let wire2 = alice_restored
+            .encrypt_app_message(&alice_provider_restored, &alice_signer, b"after restart")
+            .unwrap();
+        let recovered = bob.decrypt_app_message(&bob_provider, &wire2).unwrap();
+        assert_eq!(recovered, b"after restart");
+
+        // --- Continue messaging: Bob -> Alice (restored) ---
+        let wire3 = bob
+            .encrypt_app_message(&bob_provider, &bob_signer, b"bob reply")
+            .unwrap();
+        let recovered2 = alice_restored
+            .decrypt_app_message(&alice_provider_restored, &wire3)
+            .unwrap();
+        assert_eq!(recovered2, b"bob reply");
+    }
+
+    #[test]
+    fn round_trip_preserves_group_id_and_epoch() {
+        let provider = new_provider();
+        let ik = ghost_identity::IdentityKey::generate();
+        let dk = ghost_identity::DeviceKey::generate(&ik);
+        let session = MlsSession::create(&provider, &ik, &dk).unwrap();
+
+        let original_group_id = session.group_id_bytes();
+        let original_epoch = session.current_epoch();
+
+        let blob = session.serialize_state(&provider).unwrap();
+
+        let (provider2, session2) = MlsSession::deserialize_state(&blob).unwrap();
+        let _ = provider2; // provider must stay alive
+
+        assert_eq!(session2.group_id_bytes(), original_group_id);
+        assert_eq!(session2.current_epoch(), original_epoch);
     }
 }
