@@ -87,7 +87,8 @@ mod tests {
     #[test]
     fn cbor_roundtrip() {
         let recipient = GhostId::from_bytes([5u8; 32]);
-        let original = OuterEnvelope::new(MsgType::AppMessage, recipient, 1700000000, vec![9, 9, 9]);
+        let original =
+            OuterEnvelope::new(MsgType::AppMessage, recipient, 1700000000, vec![9, 9, 9]);
         let bytes = original.to_cbor().unwrap();
         let decoded = OuterEnvelope::from_cbor(&bytes).unwrap();
         assert_eq!(decoded.version, PROTOCOL_VERSION);

@@ -70,8 +70,8 @@ fn cmd_create(
         println!("  Display name: {}", name);
     }
     println!(
-        "  Pre-keys:     {} one-time + 1 last-resort",
-        identity.one_time_prekeys.len()
+        "  KeyPackages:  {} (populate via ghost-protocol after create)",
+        identity.mls_keypackages.len()
     );
     Ok(())
 }
@@ -91,8 +91,8 @@ fn cmd_show(passphrase: Option<String>) -> Result<()> {
         identity.display_name.as_deref().unwrap_or("<none>")
     );
     println!(
-        "  Pre-keys:     {} one-time + 1 last-resort",
-        identity.one_time_prekeys.len()
+        "  KeyPackages:  {} (populate via ghost-protocol after create)",
+        identity.mls_keypackages.len()
     );
     println!("  Created at:   {} (unix seconds)", identity.created_at);
 

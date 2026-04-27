@@ -32,9 +32,8 @@ mod serde_sig {
                 write!(f, "64 bytes")
             }
             fn visit_bytes<E: serde::de::Error>(self, v: &[u8]) -> Result<Self::Value, E> {
-                v.try_into().map_err(|_| {
-                    E::invalid_length(v.len(), &"64 bytes")
-                })
+                v.try_into()
+                    .map_err(|_| E::invalid_length(v.len(), &"64 bytes"))
             }
         }
         d.deserialize_bytes(Visitor)
@@ -117,7 +116,8 @@ mod tests {
         let sender = GhostId::from_bytes([7u8; 32]);
         let uuid = MessageUuid::new();
         let payload = b"hello world".to_vec();
-        let signing_bytes = SealedBlob::signing_bytes(&sender, PayloadType::AppText, &payload, &uuid);
+        let signing_bytes =
+            SealedBlob::signing_bytes(&sender, PayloadType::AppText, &payload, &uuid);
         let dk = fake_signing_key();
         let sig = dk.sign(&signing_bytes).to_bytes();
 
@@ -142,7 +142,10 @@ mod tests {
     #[test]
     fn payload_type_try_from() {
         assert_eq!(PayloadType::try_from(0u8).unwrap(), PayloadType::AppText);
-        assert_eq!(PayloadType::try_from(1u8).unwrap(), PayloadType::MlsHandshake);
+        assert_eq!(
+            PayloadType::try_from(1u8).unwrap(),
+            PayloadType::MlsHandshake
+        );
         assert!(matches!(
             PayloadType::try_from(99u8),
             Err(ProtoError::Invalid(_))

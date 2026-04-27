@@ -7,7 +7,7 @@ set -euo pipefail
 # On Windows the default cargo invocation can fail with "dlltool not found" due
 # to PATH ordering. Pin the toolchain explicitly so all cargo calls in this
 # script use the msvc linker chain unambiguously.
-export RUSTUP_TOOLCHAIN="${RUSTUP_TOOLCHAIN:-1.85-x86_64-pc-windows-msvc}"
+export RUSTUP_TOOLCHAIN="${RUSTUP_TOOLCHAIN:-1.87-x86_64-pc-windows-msvc}"
 
 SMOKE_HOME="${TMPDIR:-/tmp}/ghost-smoke-plan01-$$"
 trap 'rm -rf "$SMOKE_HOME"' EXIT

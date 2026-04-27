@@ -40,8 +40,7 @@ pub fn wrap_message(
     let sender_id = sender_ik.ghost_id();
     let msg_uuid = MessageUuid::new();
 
-    let signing_bytes =
-        SealedBlob::signing_bytes(&sender_id, payload_type, &payload, &msg_uuid);
+    let signing_bytes = SealedBlob::signing_bytes(&sender_id, payload_type, &payload, &msg_uuid);
     let signature = sender_dk.sign(&signing_bytes);
 
     let blob = SealedBlob {
@@ -79,9 +78,8 @@ where
     let blob_bytes = unseal(&recipient_secret, &outer.sealed_blob)?;
     let blob = SealedBlob::from_cbor(&blob_bytes)?;
 
-    let sender_dk_pub = sender_dk_for_check(&blob.sender_id).ok_or_else(|| {
-        ProtoError::Invalid(format!("no known DK for sender {}", blob.sender_id))
-    })?;
+    let sender_dk_pub = sender_dk_for_check(&blob.sender_id)
+        .ok_or_else(|| ProtoError::Invalid(format!("no known DK for sender {}", blob.sender_id)))?;
     let signing_bytes = SealedBlob::signing_bytes(
         &blob.sender_id,
         blob.payload_type,
@@ -106,10 +104,7 @@ mod tests {
     use super::*;
     use ghost_identity::{DeviceKey, IdentityKey};
 
-    fn alice_and_bob() -> (
-        (IdentityKey, DeviceKey),
-        (IdentityKey, DeviceKey),
-    ) {
+    fn alice_and_bob() -> ((IdentityKey, DeviceKey), (IdentityKey, DeviceKey)) {
         let alice_ik = IdentityKey::generate();
         let alice_dk = DeviceKey::generate(&alice_ik);
         let bob_ik = IdentityKey::generate();

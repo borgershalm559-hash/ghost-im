@@ -10,8 +10,7 @@ pub mod storage;
 
 pub use file_format::{Header, FILE_FORMAT_VERSION};
 pub use identity::{
-    CreateOptions, Identity, IdentityError, IDENTITY_SCHEMA_VERSION,
-    INITIAL_KEYPACKAGE_COUNT,
+    CreateOptions, Identity, IdentityError, IDENTITY_SCHEMA_VERSION, INITIAL_KEYPACKAGE_COUNT,
 };
 pub use keys::{DeviceKey, IdentityKey};
 pub use keystore::{load_or_create_secret, store_secret, wipe_secret, KeystoreError};

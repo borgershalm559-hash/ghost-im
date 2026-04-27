@@ -46,9 +46,12 @@ fn alice_and_bob_full_exchange() {
         .expect("validate bob's keypackage");
 
     // ===== Alice creates the group, adds Bob =====
-    let mut alice_session =
-        MlsSession::create(&alice_provider, &alice_id.identity_key, &alice_id.device_key)
-            .expect("alice create session");
+    let mut alice_session = MlsSession::create(
+        &alice_provider,
+        &alice_id.identity_key,
+        &alice_id.device_key,
+    )
+    .expect("alice create session");
     let alice_signer = MlsSession::signer_from_dk(&alice_id.device_key);
     let invite = alice_session
         .add_member(&alice_provider, &alice_signer, bob_kp)

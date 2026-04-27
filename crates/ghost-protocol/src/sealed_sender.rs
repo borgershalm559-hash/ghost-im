@@ -77,7 +77,7 @@ const EPHEMERAL_PUB_LEN: usize = 32;
 ///
 /// Output layout: `eph_pub (32) || nonce (24) || ciphertext+tag`
 pub fn seal_to(recipient_delivery_pub: &X25519Public, plaintext: &[u8]) -> Result<Vec<u8>> {
-    let eph_secret = EphemeralSecret::random_from_rng(&mut rand::thread_rng());
+    let eph_secret = EphemeralSecret::random_from_rng(rand::thread_rng());
     let eph_pub = X25519Public::from(&eph_secret);
     let shared = eph_secret.diffie_hellman(recipient_delivery_pub);
 

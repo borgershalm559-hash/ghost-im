@@ -53,8 +53,7 @@ mod tests {
         let provider = new_provider();
         let ik = IdentityKey::generate();
         let dk = DeviceKey::generate(&ik);
-        let (_cwk, _sig_key) =
-            credential_with_key(&provider, &ik, &dk).expect("build credential");
+        let (_cwk, _sig_key) = credential_with_key(&provider, &ik, &dk).expect("build credential");
     }
 
     #[test]
