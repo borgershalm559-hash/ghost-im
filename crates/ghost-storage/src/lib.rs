@@ -6,8 +6,10 @@
 //! user's IdentityKey via HKDF, so unlocking the identity unlocks the DB.
 
 pub mod error;
+pub mod master_key;
 
 pub use error::{Result, StorageError};
+pub use master_key::{derive_master_key, master_key_pragma, MASTER_KEY_LEN};
 
 #[cfg(test)]
 mod smoke_tests {
