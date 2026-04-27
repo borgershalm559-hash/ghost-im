@@ -37,6 +37,13 @@ enum Command {
         #[arg(long)]
         passphrase: Option<String>,
     },
+    /// Permanently delete the local identity file AND the OS keystore secret.
+    /// DESTRUCTIVE: the identity is unrecoverable without a backup.
+    Wipe {
+        /// Skip the confirmation prompt.
+        #[arg(long)]
+        yes: bool,
+    },
 }
 
 fn cmd_create(
@@ -97,6 +104,32 @@ fn cmd_show(passphrase: Option<String>) -> Result<()> {
     Ok(())
 }
 
+fn cmd_wipe(yes: bool) -> Result<()> {
+    use std::io::{self, Write};
+    let path = identity_file().context("resolve identity path")?;
+    println!("This will delete:");
+    println!("  - identity file: {}", path.display());
+    println!("  - OS keystore secret for service 'im.ghost.app'");
+    println!("If you have no backup, your Ghost ID becomes unreachable forever.");
+    if !yes {
+        print!("Type 'WIPE' to confirm: ");
+        io::stdout().flush().ok();
+        let mut buf = String::new();
+        io::stdin().read_line(&mut buf)?;
+        if buf.trim() != "WIPE" {
+            println!("Cancelled.");
+            return Ok(());
+        }
+    }
+
+    if path.exists() {
+        std::fs::remove_file(&path).context("remove identity file")?;
+    }
+    ghost_identity::wipe_secret().context("wipe keystore secret")?;
+    println!("Wiped.");
+    Ok(())
+}
+
 fn main() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
@@ -109,6 +142,7 @@ fn main() -> Result<()> {
             overwrite,
         } => cmd_create(display_name, passphrase, overwrite)?,
         Command::Show { passphrase } => cmd_show(passphrase)?,
+        Command::Wipe { yes } => cmd_wipe(yes)?,
     }
     Ok(())
 }
