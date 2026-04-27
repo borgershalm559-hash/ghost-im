@@ -1,8 +1,10 @@
 //! Ghost core types, errors, and utilities. No I/O. No crypto operations beyond hashing.
 
+pub mod error;
 pub mod fingerprint;
 pub mod id;
 
+pub use error::CoreError;
 pub use fingerprint::Fingerprint;
 pub use id::{GhostId, GhostIdParseError, HRP_GHOST};
 
