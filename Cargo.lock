@@ -1221,6 +1221,37 @@ dependencies = [
 ]
 
 [[package]]
+name = "ghost-client"
+version = "0.0.1"
+dependencies = [
+ "bech32",
+ "blake3",
+ "ciborium",
+ "ed25519-dalek",
+ "ghost-core",
+ "ghost-identity",
+ "ghost-network",
+ "ghost-protocol",
+ "ghost-server",
+ "ghost-storage",
+ "hex",
+ "libp2p",
+ "openmls",
+ "openmls_basic_credential",
+ "openmls_rust_crypto 0.5.1",
+ "openmls_traits 0.5.0",
+ "proptest",
+ "rand 0.8.6",
+ "serde",
+ "serde_bytes",
+ "tempfile",
+ "thiserror 1.0.69",
+ "tokio",
+ "uuid",
+ "x25519-dalek",
+]
+
+[[package]]
 name = "ghost-core"
 version = "0.0.1"
 dependencies = [

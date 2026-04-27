@@ -1,0 +1,39 @@
+[package]
+name = "ghost-client"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Ghost client orchestration: ties Identity + Storage + Protocol + Network + Server together."
+
+[dependencies]
+ghost-core     = { path = "../ghost-core" }
+ghost-identity = { path = "../ghost-identity" }
+ghost-protocol = { path = "../ghost-protocol" }
+ghost-storage  = { path = "../ghost-storage" }
+ghost-network  = { path = "../ghost-network" }
+ghost-server   = { path = "../ghost-server" }
+
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_bytes = { workspace = true }
+ciborium = { workspace = true }
+hex = { workspace = true }
+blake3 = { workspace = true }
+bech32 = { workspace = true }
+ed25519-dalek = { workspace = true }
+libp2p = { workspace = true }
+
+openmls = { workspace = true }
+openmls_traits = { workspace = true }
+
+thiserror = { workspace = true }
+rand = { workspace = true }
+uuid = { workspace = true }
+x25519-dalek = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+proptest = { workspace = true }
+openmls_rust_crypto = { workspace = true }
+openmls_basic_credential = { workspace = true }
