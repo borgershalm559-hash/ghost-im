@@ -88,8 +88,64 @@ impl Client {
             last_seen: now,
         }));
 
-        let server = Server::spawn(ik.clone(), network.clone(), presence.clone(), db.clone())?;
+        // Split the inbox receiver out of the network before spawning the server
+        // so the server loop can drain requests without holding the network mutex.
+        let inbox = network.lock().await.split_inbox();
+        let server = Server::spawn(ik.clone(), inbox, network.clone(), presence.clone(), db.clone())?;
 
+        let mls_provider = Arc::new(Mutex::new(new_provider()));
+
+        let client = Self {
+            identity,
+            ik,
+            db,
+            network,
+            server: Mutex::new(Some(server)),
+            presence,
+            local_peer_id,
+            local_addrs,
+            mls_provider,
+        };
+
+        client.ensure_keypackages().await?;
+        Ok(client)
+    }
+
+    /// Test-only / programmatic open. Skips the file-based identity-load + OS-keystore
+    /// path. Database is opened at the given path with master-key derived from the
+    /// supplied Identity.
+    pub async fn open_with_in_memory_identity(
+        identity: Identity,
+        db_path: std::path::PathBuf,
+        listen_addr: Multiaddr,
+    ) -> Result<Self> {
+        let ik = Arc::new(IdentityKey::from_secret_bytes(
+            identity.identity_key.secret_bytes(),
+        ));
+        let master_key = derive_master_key(&ik);
+        let db = Database::open_encrypted(&db_path, &master_key)?;
+        db.migrate()?;
+        let db = Arc::new(db);
+
+        let network = Network::spawn(&ik).await?;
+        let local_peer_id = network.local_peer_id();
+        let network = Arc::new(Mutex::new(network));
+        network.lock().await.listen_on(listen_addr).await?;
+        let local_addrs = wait_for_local_addrs(&network).await;
+
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        let presence = Arc::new(Mutex::new(PresenceState {
+            online: true,
+            last_seen: now,
+        }));
+
+        // Split the inbox receiver out of the network before spawning the server
+        // so the server loop can drain requests without holding the network mutex.
+        let inbox = network.lock().await.split_inbox();
+        let server = Server::spawn(ik.clone(), inbox, network.clone(), presence.clone(), db.clone())?;
         let mls_provider = Arc::new(Mutex::new(new_provider()));
 
         let client = Self {
@@ -313,24 +369,25 @@ impl Client {
             .encrypt_app_message(&provider, &signer, text.as_bytes())
             .map_err(crate::error::ClientError::Protocol)?;
 
-        // Find peer's address.
+        // Find peer's address (optional — may be None for contacts added via Welcome,
+        // where we know the peer ID but not the listening address; libp2p will use
+        // the active connection if one exists).
         let contact = self
             .db
             .contacts()
             .get(&contact_id)?
             .ok_or_else(|| crate::error::ClientError::ContactNotFound(format!("{contact_id}")))?;
-        let address = contact
+        let address: Option<Multiaddr> = contact
             .last_endpoint
             .as_ref()
-            .ok_or_else(|| crate::error::ClientError::Invalid("contact has no endpoint".into()))?
-            .parse::<Multiaddr>()
-            .map_err(|e| crate::error::ClientError::Invalid(format!("address: {e}")))?;
+            .and_then(|ep| ep.parse::<Multiaddr>().ok());
         let peer_id = peer_id_from_ghost_id(&contact_id)?;
 
-        // Fetch peer's delivery key.
+        // Fetch peer's delivery key (use address hint if available; otherwise rely
+        // on an existing libp2p connection established during Welcome exchange).
         let server_client = ServerClient::new(self.network.clone());
         let peer_delivery_bytes = server_client
-            .get_delivery_key(peer_id, Some(address.clone()))
+            .get_delivery_key(peer_id, address.clone())
             .await?;
         let peer_delivery_pub = x25519_dalek::PublicKey::from(peer_delivery_bytes);
 
@@ -349,7 +406,7 @@ impl Client {
 
         // Send.
         server_client
-            .send_inbox(peer_id, Some(address), envelope_bytes)
+            .send_inbox(peer_id, address, envelope_bytes)
             .await?;
 
         // Persist outgoing message.

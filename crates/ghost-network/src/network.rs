@@ -83,12 +83,28 @@ impl std::fmt::Debug for InboundRequest {
 // Network handle
 // ---------------------------------------------------------------------------
 
+/// The inbound-request receiver half of the network stack.
+///
+/// Obtained via [`Network::split_inbox`]. Holds the receiving end of the
+/// request channel so the `Server` can drain inbound requests without holding
+/// the `Network` mutex.
+pub struct NetworkInbox {
+    pub(crate) request_rx: mpsc::Receiver<InboundRequest>,
+}
+
+impl NetworkInbox {
+    /// Receive the next inbound request, or `None` if the event loop has stopped.
+    pub async fn next_request(&mut self) -> Option<InboundRequest> {
+        self.request_rx.recv().await
+    }
+}
+
 /// Handle to the running Ghost network stack.
 ///
 /// Dropping this value stops the event loop.
 pub struct Network {
     cmd_tx: mpsc::Sender<Command>,
-    request_rx: mpsc::Receiver<InboundRequest>,
+    request_rx: Option<mpsc::Receiver<InboundRequest>>,
     local_peer_id: PeerId,
     // Keeps the spawned task alive for as long as the Network is alive.
     _task: tokio::task::JoinHandle<()>,
@@ -126,7 +142,7 @@ impl Network {
 
         Ok(Self {
             cmd_tx,
-            request_rx,
+            request_rx: Some(request_rx),
             local_peer_id,
             _task: task,
         })
@@ -172,8 +188,27 @@ impl Network {
     }
 
     /// Receive the next inbound request, or `None` if the event loop has stopped.
+    ///
+    /// Prefer [`split_inbox`] when the inbox receiver needs to be used without
+    /// holding the `Network` mutex (e.g. in a concurrent server task).
     pub async fn next_request(&mut self) -> Option<InboundRequest> {
-        self.request_rx.recv().await
+        match self.request_rx.as_mut() {
+            Some(rx) => rx.recv().await,
+            None => None,
+        }
+    }
+
+    /// Take the inbound-request receiver out of this `Network`, returning a
+    /// [`NetworkInbox`] that can be used without holding the `Network` mutex.
+    ///
+    /// Panics if called more than once.
+    pub fn split_inbox(&mut self) -> NetworkInbox {
+        NetworkInbox {
+            request_rx: self
+                .request_rx
+                .take()
+                .expect("split_inbox called more than once"),
+        }
     }
 
     /// Send a response to an inbound request.

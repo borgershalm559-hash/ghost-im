@@ -3,7 +3,7 @@
 use crate::messages::{GhostRequest, GhostResponse, MIN_COMPAT_VERSION, PROTOCOL_VERSION};
 use crate::Result;
 use ghost_identity::IdentityKey;
-use ghost_network::Network;
+use ghost_network::{Network, NetworkInbox};
 use ghost_protocol::delivery_public;
 use ghost_storage::Database;
 use std::sync::Arc;
@@ -28,17 +28,23 @@ pub struct Server {
 }
 
 impl Server {
-    /// Spawn a server attached to the given Network. The Network MUST be exclusive
-    /// to this Server (the Server takes ownership of inbound request consumption
-    /// via the locked Network).
+    /// Spawn a server attached to the given Network.
+    ///
+    /// The caller must pass a [`NetworkInbox`] obtained via
+    /// [`Network::split_inbox`] *before* calling this function. Splitting
+    /// allows the server loop to drain inbound requests without holding the
+    /// `Network` mutex — enabling concurrent outbound requests from the same
+    /// process (e.g., `add_contact` sending requests while the inbox is
+    /// being drained).
     pub fn spawn(
         ik: Arc<IdentityKey>,
+        inbox: NetworkInbox,
         network: Arc<Mutex<Network>>,
         presence: Arc<Mutex<PresenceState>>,
         db: Arc<Database>,
     ) -> Result<Self> {
         let (inbox_tx, inbox_rx) = mpsc::channel::<InboundEnvelope>(64);
-        let task = tokio::spawn(run_server(ik, network, presence, db, inbox_tx));
+        let task = tokio::spawn(run_server(ik, inbox, network, presence, db, inbox_tx));
         Ok(Self {
             _task: task,
             inbox_rx,
@@ -53,18 +59,16 @@ impl Server {
 
 async fn run_server(
     ik: Arc<IdentityKey>,
+    mut inbox: NetworkInbox,
     network: Arc<Mutex<Network>>,
     presence: Arc<Mutex<PresenceState>>,
     db: Arc<Database>,
     inbox_tx: mpsc::Sender<InboundEnvelope>,
 ) {
     loop {
-        // Acquire the network lock briefly to receive the next request, then release.
-        let req = {
-            let mut net = network.lock().await;
-            net.next_request().await
-        };
-        let Some(req) = req else {
+        // Receive the next inbound request WITHOUT holding the network mutex.
+        // `NetworkInbox` owns the receiver channel half independently.
+        let Some(req) = inbox.next_request().await else {
             break;
         };
 
@@ -79,6 +83,7 @@ async fn run_server(
             .unwrap_or_default(),
         };
 
+        // Only lock briefly to send the response.
         let net = network.lock().await;
         let _ = net.respond(req.response, bytes).await;
     }

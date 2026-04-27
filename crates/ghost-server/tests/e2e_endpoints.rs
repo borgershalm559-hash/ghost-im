@@ -3,6 +3,7 @@
 use ghost_identity::Identity;
 use ghost_network::Network;
 use ghost_protocol::{delivery_public, new_provider, populate_initial_keypackages};
+use ghost_network::NetworkInbox;
 use ghost_server::{Client, PresenceState, Server};
 use ghost_storage::{derive_master_key, Database, MyKeyPackageRow};
 use libp2p::Multiaddr;
@@ -73,9 +74,14 @@ async fn bob_queries_all_endpoints_on_alice() {
         last_seen: 1700000060,
     }));
 
+    // Split the inbox receiver out before spawning the server so the server
+    // loop can drain requests without holding the network mutex.
+    let alice_inbox = alice_network.lock().await.split_inbox();
+
     // Spawn Alice's Server.
     let mut alice_server = Server::spawn(
         alice_ik.clone(),
+        alice_inbox,
         alice_network.clone(),
         alice_presence.clone(),
         alice_db.clone(),
