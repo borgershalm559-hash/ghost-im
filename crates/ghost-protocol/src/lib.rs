@@ -2,6 +2,7 @@
 
 pub mod envelope;
 pub mod error;
+pub mod key_package;
 pub mod mls_credential;
 pub mod mls_provider;
 pub mod msg_uuid;
@@ -11,6 +12,7 @@ pub mod sealed_sender;
 
 pub use envelope::{unwrap_message, wrap_message, UnwrappedMessage};
 pub use error::{ProtoError, Result};
+pub use key_package::{generate_key_package, GHOST_CIPHERSUITE};
 pub use mls_credential::credential_with_key;
 pub use mls_provider::{new_provider, GhostMlsProvider};
 pub use msg_uuid::MessageUuid;
