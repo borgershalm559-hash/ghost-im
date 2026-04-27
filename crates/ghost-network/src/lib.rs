@@ -1,8 +1,10 @@
 //! Ghost network: QUIC transport, libp2p TLS auth, Kademlia DHT discovery.
 
 pub mod error;
+pub mod identity;
 
 pub use error::{NetworkError, Result};
+pub use identity::{ghost_id_from_peer_id, libp2p_keypair_from_ik, peer_id_from_ghost_id};
 
 #[cfg(test)]
 mod smoke_tests {
