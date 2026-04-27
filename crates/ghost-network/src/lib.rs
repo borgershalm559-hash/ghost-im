@@ -1,7 +1,8 @@
 //! Ghost network: QUIC transport, libp2p TLS auth, Kademlia DHT discovery.
-//!
-//! Built on top of rust-libp2p 0.56. The network carries opaque bytes (CBOR envelopes
-//! produced by ghost-protocol's `wrap_message`); it does not interpret payload content.
+
+pub mod error;
+
+pub use error::{NetworkError, Result};
 
 #[cfg(test)]
 mod smoke_tests {
