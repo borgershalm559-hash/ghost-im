@@ -1,6 +1,8 @@
 //! Ghost Tauri command layer.
 
 pub mod app_state;
+pub mod commands;
+pub mod dto;
 pub mod error;
 
 pub use app_state::AppState;
