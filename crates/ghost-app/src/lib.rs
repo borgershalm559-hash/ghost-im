@@ -1,8 +1,10 @@
 //! Ghost Tauri command layer.
-//!
-//! Wraps `ghost-client` for the desktop shell. Exposes async `#[tauri::command]`
-//! functions that return JSON-serializable DTOs and a `CommandError` string-shaped
-//! error type.
+
+pub mod app_state;
+pub mod error;
+
+pub use app_state::AppState;
+pub use error::{CommandError, CommandResult};
 
 #[cfg(test)]
 mod smoke_tests {
