@@ -9,6 +9,10 @@ use ghost_core::Fingerprint;
 use std::sync::Arc;
 use tauri::{AppHandle, State};
 
+/// Open the embedded `ghost-client` runtime. Reads identity from disk (with the
+/// optional passphrase), starts the Network + Server, and stores the Client in
+/// `AppState`. Idempotent: calling twice returns the existing client info
+/// without re-opening.
 #[tauri::command]
 pub async fn open_client(
     passphrase: Option<String>,
@@ -46,6 +50,9 @@ pub async fn open_client(
     Ok(info)
 }
 
+/// Drop the in-memory Client (network/server are torn down by Drop on the inner
+/// types). Identity file remains on disk. Used by tests; not currently exposed
+/// in the UI.
 #[tauri::command]
 pub async fn close_client(state: State<'_, AppState>) -> CommandResult<()> {
     let mut guard = state.client.lock().await;

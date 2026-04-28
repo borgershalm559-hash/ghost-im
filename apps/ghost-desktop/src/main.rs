@@ -32,8 +32,9 @@ fn main() {
             write::send_message,
         ])
         .setup(|app| {
-            // Inbox bridge is started lazily after `open_client` succeeds.
-            // We hold the AppHandle here for later use by lifecycle::open_client.
+            // Reserved for future use (shutdown hook, switch-identity flow).
+            // open_client gets AppHandle directly via Tauri command parameter,
+            // so it does not retrieve this state.
             let app_handle = app.handle().clone();
             app.manage(InboxBridgeHandle(app_handle));
             Ok(())
