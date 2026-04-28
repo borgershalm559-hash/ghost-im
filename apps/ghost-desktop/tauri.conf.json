@@ -1,0 +1,32 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Ghost",
+  "version": "0.0.1",
+  "identifier": "im.ghost.desktop",
+  "build": {
+    "frontendDist": "../../frontend/build",
+    "devUrl": "http://localhost:1420",
+    "beforeDevCommand": "pnpm --dir ../../frontend dev",
+    "beforeBuildCommand": "pnpm --dir ../../frontend build"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Ghost",
+        "width": 1024,
+        "height": 720,
+        "minWidth": 480,
+        "minHeight": 480,
+        "resizable": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": ["icons/icon.ico"]
+  }
+}

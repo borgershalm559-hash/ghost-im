@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
+    "apps/ghost-desktop",
     "crates/ghost-core",
     "crates/ghost-app",
     "crates/ghost-client",
