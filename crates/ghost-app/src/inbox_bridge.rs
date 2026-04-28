@@ -74,10 +74,7 @@ fn max_incoming_sent_at(client: &Client) -> Option<i64> {
     max_at
 }
 
-fn scan_new_incoming(
-    client: &Client,
-    after: i64,
-) -> ghost_client::Result<Vec<MessageRow>> {
+fn scan_new_incoming(client: &Client, after: i64) -> ghost_client::Result<Vec<MessageRow>> {
     let mut out = Vec::new();
     for c in client.list_contacts()? {
         for row in client.list_messages(&c.ghost_id, u32::MAX, 0)? {
