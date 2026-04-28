@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "crates/ghost-core",
+    "crates/ghost-app",
     "crates/ghost-client",
     "crates/ghost-identity",
     "crates/ghost-network",
@@ -79,6 +80,14 @@ uuid = { version = "1.10", features = ["v7", "serde"] }
 
 # CLI
 clap = { version = "4.5", features = ["derive"] }
+
+# Tauri (desktop shell)
+tauri = { version = "2", features = [] }
+tauri-build = "2"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # Test-only
 proptest = "1.5"

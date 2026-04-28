@@ -1,0 +1,19 @@
+[package]
+name = "ghost-app"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Tauri command layer for Ghost: wraps ghost-client for the desktop shell."
+
+[dependencies]
+ghost-core     = { path = "../ghost-core" }
+ghost-identity = { path = "../ghost-identity" }
+ghost-client   = { path = "../ghost-client" }
+ghost-storage  = { path = "../ghost-storage" }
+
+tauri   = { workspace = true }
+tokio   = { workspace = true }
+serde   = { workspace = true }
+tracing = { workspace = true }
+thiserror = { workspace = true }
