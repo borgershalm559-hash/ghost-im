@@ -1,0 +1,159 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  release-windows:
+    name: Build + sign + release (Windows)
+    runs-on: windows-latest
+    permissions:
+      contents: write   # required for gh release create
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Guard placeholder owner/repo
+        shell: pwsh
+        run: |
+          $conf = Get-Content apps/ghost-desktop/tauri.conf.json -Raw
+          if ($conf -match 'OWNER_REPLACE_ME' -or $conf -match 'REPO_REPLACE_ME') {
+            Write-Error "tauri.conf.json still contains OWNER_REPLACE_ME or REPO_REPLACE_ME. Fill in the real github coordinates before tagging a release. See docs/release-process.md."
+            exit 1
+          }
+          if ($conf -match 'RWQ_PASTE_THE_BASE64_LINE_FROM') {
+            Write-Error "tauri.conf.json still contains the placeholder pubkey. Run scripts/generate-minisign-keypair.sh and paste the real pubkey before releasing."
+            exit 1
+          }
+
+      - name: Install Rust 1.87 (msvc)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.87
+          targets: x86_64-pc-windows-msvc
+
+      - name: Install Strawberry Perl
+        shell: pwsh
+        run: choco install strawberryperl -y --no-progress
+
+      - name: Install minisign
+        shell: pwsh
+        run: choco install minisign -y --no-progress
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 10
+
+      - name: Install tauri-cli
+        shell: pwsh
+        run: cargo install tauri-cli --version "^2" --locked
+
+      - name: Compute SOURCE_DATE_EPOCH
+        id: source-date
+        shell: bash
+        run: echo "epoch=$(git log -1 --format=%ct)" >> $GITHUB_OUTPUT
+
+      - name: Frontend deps + build
+        shell: bash
+        run: pnpm --dir frontend install --frozen-lockfile
+
+      - name: Tauri build
+        shell: bash
+        env:
+          SOURCE_DATE_EPOCH: ${{ steps.source-date.outputs.epoch }}
+        run: cargo +1.87-x86_64-pc-windows-msvc tauri build --config apps/ghost-desktop/tauri.conf.json
+
+      - name: Locate MSI
+        id: artifacts
+        shell: bash
+        run: |
+          MSI="$(ls target/release/bundle/msi/ghost-desktop_*.msi | head -1)"
+          if [[ -z "${MSI}" ]]; then
+            echo "ERROR: no .msi produced under target/release/bundle/msi/" >&2
+            exit 1
+          fi
+          echo "msi_path=${MSI}" >> $GITHUB_OUTPUT
+          echo "msi_name=$(basename ${MSI})" >> $GITHUB_OUTPUT
+
+      - name: Sign MSI with minisign
+        shell: bash
+        env:
+          MINISIGN_PRIVATE_KEY: ${{ secrets.MINISIGN_PRIVATE_KEY }}
+        run: |
+          # Write the secret to a temp file (minisign needs the key as a file).
+          # Use a process-scoped tmpdir; GH Actions cleans it on job exit.
+          KEYFILE="${RUNNER_TEMP}/minisign.key"
+          printf '%s\n' "${MINISIGN_PRIVATE_KEY}" > "${KEYFILE}"
+          chmod 600 "${KEYFILE}"
+
+          # Sign the MSI.
+          # -W tells minisign to read passphrase from MINISIGN_PASSWORD env var.
+          # We set MINISIGN_PASSWORD to empty since the CI key was generated
+          # with an empty passphrase (see release-process.md). If you used
+          # a non-empty passphrase locally, set the MINISIGN_PASSWORD secret
+          # in repo settings as well.
+          MINISIGN_PASSWORD="${{ secrets.MINISIGN_PASSWORD }}" \
+          minisign -S -W -s "${KEYFILE}" -m "${{ steps.artifacts.outputs.msi_path }}"
+
+          rm -f "${KEYFILE}"
+
+      - name: Generate latest.json manifest
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"   # strip leading v
+          MSI_NAME="${{ steps.artifacts.outputs.msi_name }}"
+          MSI_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/${MSI_NAME}"
+          SIG=$(cat "${{ steps.artifacts.outputs.msi_path }}.sig")
+          PUB_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+          # Notes from the tag annotation (if any).
+          NOTES=$(git tag -l --format='%(contents)' "${GITHUB_REF_NAME}" | head -c 4000)
+
+          jq -n \
+            --arg version "${VERSION}" \
+            --arg notes "${NOTES}" \
+            --arg pub_date "${PUB_DATE}" \
+            --arg url "${MSI_URL}" \
+            --arg signature "${SIG}" \
+            '{
+              version: $version,
+              notes: $notes,
+              pub_date: $pub_date,
+              platforms: {
+                "windows-x86_64": {
+                  signature: $signature,
+                  url: $url
+                }
+              }
+            }' > latest.json
+
+          cat latest.json
+
+      - name: Create GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          NOTES_FILE="${RUNNER_TEMP}/release-notes.md"
+          git tag -l --format='%(contents)' "${GITHUB_REF_NAME}" > "${NOTES_FILE}"
+          if [[ ! -s "${NOTES_FILE}" ]]; then
+            echo "Release ${GITHUB_REF_NAME}" > "${NOTES_FILE}"
+          fi
+
+          gh release create "${GITHUB_REF_NAME}" \
+            --title "Ghost ${GITHUB_REF_NAME}" \
+            --notes-file "${NOTES_FILE}" \
+            "${{ steps.artifacts.outputs.msi_path }}" \
+            "${{ steps.artifacts.outputs.msi_path }}.sig" \
+            latest.json
