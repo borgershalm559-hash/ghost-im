@@ -33,9 +33,9 @@
 </script>
 
 <div style="border: 1px solid #2a2d36; border-radius: 8px; padding: 1rem; margin-bottom: 1rem;">
-  <h3 style="margin: 0 0 0.5rem 0;">Your invite</h3>
+  <h3 style="margin: 0 0 0.5rem 0;">Ваш инвайт</h3>
   <p style="opacity: 0.7; font-size: 0.9rem; margin: 0 0 0.75rem 0;">
-    Share this string with one person. It expires in 7 days.
+    Поделитесь этой строкой с одним человеком. Срок действия — 7 дней.
   </p>
   <button
     type="button"
@@ -43,7 +43,7 @@
     disabled={busy}
     style="padding: 0.5rem 1rem; background: #4a4cff; color: white; border: 0; border-radius: 6px; cursor: pointer;"
   >
-    {busy ? 'Generating…' : 'Generate invite'}
+    {busy ? 'Генерация…' : 'Создать инвайт'}
   </button>
 
   {#if invite}
@@ -58,7 +58,7 @@
         onclick={copy}
         style="margin-top: 0.5rem; padding: 0.4rem 0.8rem; background: transparent; color: inherit; border: 1px solid #2a2d36; border-radius: 6px; cursor: pointer;"
       >
-        {copied ? 'Copied!' : 'Copy'}
+        {copied ? 'Скопировано!' : 'Копировать'}
       </button>
     </div>
   {/if}

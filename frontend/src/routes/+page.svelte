@@ -59,12 +59,12 @@
 
 <section style="padding: 2rem; max-width: 720px; margin: 0 auto;">
   {#if booting}
-    <p>Loading…</p>
+    <p>Загрузка…</p>
   {:else if bootError}
     <p style="color: #ff6464;">{bootError}</p>
   {:else if store.info}
     <header style="margin-bottom: 1.5rem;">
-      <div style="opacity: 0.6; font-size: 0.8rem;">YOUR GHOST ID</div>
+      <div style="opacity: 0.6; font-size: 0.8rem;">ВАШ GHOST ID</div>
       <div style="font-family: monospace; font-size: 0.95rem; word-break: break-all;">
         {store.info.ghost_id}
       </div>

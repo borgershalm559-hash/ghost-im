@@ -8,9 +8,9 @@
 </script>
 
 <div style="border: 1px solid #2a2d36; border-radius: 8px; padding: 1rem;">
-  <h3 style="margin: 0 0 0.5rem 0;">Contacts</h3>
+  <h3 style="margin: 0 0 0.5rem 0;">Контакты</h3>
   {#if store.contacts.length === 0}
-    <p style="opacity: 0.6; margin: 0;">No contacts yet. Share an invite to add one.</p>
+    <p style="opacity: 0.6; margin: 0;">Контактов пока нет. Поделитесь инвайтом, чтобы добавить.</p>
   {:else}
     <ul style="list-style: none; padding: 0; margin: 0;">
       {#each store.contacts as c (c.ghost_id)}

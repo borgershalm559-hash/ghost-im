@@ -29,15 +29,15 @@
 </script>
 
 <section style="padding: 2rem; max-width: 520px;">
-  <h1 style="margin-top: 0;">Welcome to Ghost</h1>
+  <h1 style="margin-top: 0;">Добро пожаловать в Ghost</h1>
   <p style="opacity: 0.8;">
-    Create your identity. It is generated locally and never sent to a server.
-    Save the recovery file — losing it loses the identity for good.
+    Создайте свою личность. Она генерируется локально и никогда не отправляется
+    на сервер. Сохраните резервную копию — без неё восстановить личность не получится.
   </p>
 
   <form onsubmit={submit}>
     <label style="display: block; margin: 1rem 0;">
-      <div style="margin-bottom: 0.25rem;">Display name (optional)</div>
+      <div style="margin-bottom: 0.25rem;">Имя (необязательно)</div>
       <input
         type="text"
         bind:value={displayName}
@@ -48,7 +48,7 @@
     </label>
 
     <label style="display: block; margin: 1rem 0;">
-      <div style="margin-bottom: 0.25rem;">Passphrase (optional, recommended)</div>
+      <div style="margin-bottom: 0.25rem;">Пароль (необязательно, рекомендуется)</div>
       <input
         type="password"
         bind:value={passphrase}
@@ -62,7 +62,7 @@
       disabled={busy}
       style="padding: 0.6rem 1.2rem; background: #4a4cff; color: white; border: 0; border-radius: 6px; cursor: pointer;"
     >
-      {busy ? 'Creating…' : 'Create identity'}
+      {busy ? 'Создание…' : 'Создать личность'}
     </button>
   </form>
 

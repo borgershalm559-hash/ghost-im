@@ -70,7 +70,7 @@
 
 <section style="display: flex; flex-direction: column; height: 100%; padding: 1rem; max-width: 720px; margin: 0 auto;">
   <header style="margin-bottom: 0.75rem;">
-    <a href="/" style="color: #4a8cff; text-decoration: none;">← Home</a>
+    <a href="/" style="color: #4a8cff; text-decoration: none;">← На главную</a>
     <div style="font-family: monospace; opacity: 0.7; font-size: 0.85rem; margin-top: 0.25rem; word-break: break-all;">
       {contactGhostId}
     </div>
@@ -92,7 +92,7 @@
       </div>
     {/each}
     {#if messages.length === 0}
-      <p style="opacity: 0.5; text-align: center; margin-top: 2rem;">No messages yet.</p>
+      <p style="opacity: 0.5; text-align: center; margin-top: 2rem;">Сообщений пока нет.</p>
     {/if}
   </div>
 
@@ -104,7 +104,7 @@
       type="text"
       bind:value={input}
       disabled={busy}
-      placeholder="Type a message…"
+      placeholder="Введите сообщение…"
       style="flex: 1; padding: 0.6rem; background: #14151a; color: inherit; border: 1px solid #2a2d36; border-radius: 6px;"
     />
     <button
@@ -112,7 +112,7 @@
       disabled={busy || input.trim() === ''}
       style="padding: 0.6rem 1.2rem; background: #4a4cff; color: white; border: 0; border-radius: 6px; cursor: pointer;"
     >
-      {busy ? 'Sending…' : 'Send'}
+      {busy ? 'Отправка…' : 'Отправить'}
     </button>
   </form>
 

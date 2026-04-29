@@ -16,7 +16,7 @@
     try {
       await addContact(inviteInput.trim());
       inviteInput = '';
-      okMsg = 'Contact added.';
+      okMsg = 'Контакт добавлен.';
       const cs = await listContacts();
       store.setContacts(cs);
     } catch (e) {
@@ -28,7 +28,7 @@
 </script>
 
 <div style="border: 1px solid #2a2d36; border-radius: 8px; padding: 1rem; margin-bottom: 1rem;">
-  <h3 style="margin: 0 0 0.5rem 0;">Add contact</h3>
+  <h3 style="margin: 0 0 0.5rem 0;">Добавить контакт</h3>
   <form onsubmit={submit}>
     <textarea
       bind:value={inviteInput}
@@ -42,7 +42,7 @@
       disabled={busy || inviteInput.trim() === ''}
       style="margin-top: 0.5rem; padding: 0.5rem 1rem; background: #4a4cff; color: white; border: 0; border-radius: 6px; cursor: pointer;"
     >
-      {busy ? 'Adding…' : 'Add contact'}
+      {busy ? 'Добавление…' : 'Добавить'}
     </button>
   </form>
   {#if errorMsg}<p style="color: #ff6464; margin: 0.5rem 0 0 0;">{errorMsg}</p>{/if}
