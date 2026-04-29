@@ -1,0 +1,12 @@
+# Reproducible build flags for release artifacts.
+#
+# --remap-path-prefix: removes absolute build paths from debug info, so
+# `cargo build` on different machines (different home directories) produces
+# byte-identical binaries.
+#
+# These flags apply to ALL targets and ALL profiles; the release profile in
+# Cargo.toml at the workspace root takes precedence for release-specific
+# overrides like LTO and codegen-units.
+
+[build]
+rustflags = ["--remap-path-prefix", "${CARGO_MANIFEST_DIR}=."]
