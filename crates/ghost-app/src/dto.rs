@@ -56,6 +56,15 @@ pub struct MessageDto {
     pub received_at: Option<i64>,
 }
 
+/// Result of `check_for_update` command. `None` (in `CommandResult<Option<…>>`) means
+/// no update available; `Some(...)` means an update is available with these details.
+#[derive(Debug, Serialize)]
+pub struct UpdateAvailableDto {
+    pub version: String,
+    pub notes: Option<String>,
+    pub release_date: Option<String>,
+}
+
 /// Result of `create_invite` command.
 #[derive(Debug, Serialize)]
 pub struct InviteDto {

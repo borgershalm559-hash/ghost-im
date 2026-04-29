@@ -33,6 +33,12 @@ export interface MessageDto {
   received_at: number | null;
 }
 
+export interface UpdateAvailableDto {
+  version: string;
+  notes: string | null;
+  release_date: string | null;
+}
+
 export interface InviteDto {
   bech32: string;
   expires_at: number;
