@@ -27,7 +27,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost"
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost https://github.com https://api.github.com https://*.githubusercontent.com"
     }
   },
   "bundle": {
@@ -40,5 +40,15 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "active": true,
+      "dialog": false,
+      "endpoints": [
+        "https://github.com/OWNER_REPLACE_ME/REPO_REPLACE_ME/releases/latest/download/latest.json"
+      ],
+      "pubkey": "RWSWnK5PEz+SAClS5PiCFm0CE9DofRFSYkMtXDXrka+4pGBjtDwo8Ff7"
+    }
   }
 }

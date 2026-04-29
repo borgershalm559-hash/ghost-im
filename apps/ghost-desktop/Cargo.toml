@@ -16,7 +16,9 @@ tauri-build = { workspace = true }
 [dependencies]
 ghost-app = { path = "../../crates/ghost-app" }
 
+serde_json = "1"
 tauri = { workspace = true, features = [] }
+tauri-plugin-updater = { version = "2", features = ["native-tls"] }
 tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
