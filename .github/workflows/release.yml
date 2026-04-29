@@ -72,7 +72,13 @@ jobs:
         shell: bash
         env:
           SOURCE_DATE_EPOCH: ${{ steps.source-date.outputs.epoch }}
-        run: cargo +1.87-x86_64-pc-windows-msvc tauri build --config apps/ghost-desktop/tauri.conf.json
+        run: |
+          # Prepend Strawberry Perl so openssl-src (vendored OpenSSL build via
+          # tauri's transitive deps) uses Strawberry's perl + its full
+          # Locale::Maketext::Simple / Params::Check / IPC::Cmd modules.
+          # MSYS perl at /usr/bin/perl lacks them and would break the build.
+          export PATH="/c/Strawberry/perl/bin:/c/Strawberry/c/bin:$PATH"
+          cargo +1.87-x86_64-pc-windows-msvc tauri build --config apps/ghost-desktop/tauri.conf.json
 
       - name: Locate MSI
         id: artifacts
