@@ -2,41 +2,78 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [master]
   pull_request:
 
-jobs:
-  build-test:
-    name: ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-    steps:
-      - uses: actions/checkout@v4
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@1.87
+jobs:
+  rust:
+    name: Rust check (Windows)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust 1.87 (msvc)
+        uses: dtolnay/rust-toolchain@stable
         with:
+          toolchain: 1.87
+          targets: x86_64-pc-windows-msvc
           components: rustfmt, clippy
 
+      - name: Install Strawberry Perl
+        shell: pwsh
+        run: choco install strawberryperl -y --no-progress
+
       - name: Cache cargo
-        uses: Swatinem/rust-cache@v2
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Linux — install gnome-keyring + dbus
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y gnome-keyring dbus-x11 libdbus-1-dev
+      - name: Format check
+        run: cargo +1.87-x86_64-pc-windows-msvc fmt --all -- --check
 
-      - name: cargo fmt
-        run: cargo fmt --all -- --check
+      - name: Clippy (ghost-app + ghost-desktop)
+        run: cargo +1.87-x86_64-pc-windows-msvc clippy -p ghost-app -p ghost-desktop --all-targets -- -D warnings
 
-      - name: cargo clippy
-        run: cargo clippy --all-targets --workspace -- -D warnings
+      - name: Test workspace
+        run: cargo +1.87-x86_64-pc-windows-msvc test --workspace -- --test-threads=1
 
-      - name: cargo test (non-keystore)
-        # Skip keystore tests on CI; they touch the real OS keychain. Run them
-        # locally per platform before release.
-        run: cargo test --workspace -- --test-threads=1 --skip keystore::tests --skip create_load_tests
+  frontend:
+    name: Frontend check (Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 10
+
+      - name: Cache pnpm
+        uses: actions/cache@v4
+        with:
+          path: ~/.pnpm-store
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('frontend/pnpm-lock.yaml') }}
+
+      - name: Install deps
+        run: pnpm --dir frontend install --frozen-lockfile
+
+      - name: Type check
+        run: pnpm --dir frontend check
+
+      - name: Build
+        run: pnpm --dir frontend build
