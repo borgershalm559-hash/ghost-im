@@ -46,7 +46,7 @@
       "active": true,
       "dialog": false,
       "endpoints": [
-        "https://github.com/OWNER_REPLACE_ME/REPO_REPLACE_ME/releases/latest/download/latest.json"
+        "https://github.com/borgershalm559-hash/ghost-im/releases/latest/download/latest.json"
       ],
       "pubkey": "RWSWnK5PEz+SAClS5PiCFm0CE9DofRFSYkMtXDXrka+4pGBjtDwo8Ff7"
     }
