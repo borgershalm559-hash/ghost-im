@@ -3,4 +3,5 @@
 pub mod identity;
 pub mod lifecycle;
 pub mod read;
+pub mod updater;
 pub mod write;

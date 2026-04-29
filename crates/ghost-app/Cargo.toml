@@ -13,6 +13,7 @@ ghost-client   = { path = "../ghost-client" }
 ghost-storage  = { path = "../ghost-storage" }
 
 tauri   = { workspace = true }
+tauri-plugin-updater = { version = "2", features = ["native-tls"] }
 tokio   = { workspace = true }
 serde   = { workspace = true }
 tracing = { workspace = true }

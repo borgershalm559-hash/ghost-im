@@ -5,7 +5,7 @@
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use ghost_app::commands::{identity, lifecycle, read, write};
+use ghost_app::commands::{identity, lifecycle, read, updater, write};
 use ghost_app::AppState;
 use tauri::Manager;
 
@@ -29,6 +29,8 @@ fn main() {
             read::list_contacts,
             read::list_messages,
             read::create_invite,
+            updater::check_for_update,
+            updater::download_and_install_update,
             write::add_contact,
             write::send_message,
         ])
