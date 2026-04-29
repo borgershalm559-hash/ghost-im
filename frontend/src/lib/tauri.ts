@@ -11,6 +11,8 @@ import type {
   UpdateAvailableDto
 } from './types';
 
+export type { UpdateAvailableDto };
+
 export const INBOX_EVENT = 'ghost://message-received';
 export const UPDATE_PROGRESS_EVENT = 'ghost://update-progress';
 
