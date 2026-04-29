@@ -1,4 +1,6 @@
 <script lang="ts">
+  import UpdateBanner from '$lib/components/UpdateBanner.svelte';
+
   let { children } = $props();
 </script>
 
@@ -17,9 +19,18 @@
   main {
     height: 100%;
     width: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+  .layout-content {
+    flex: 1;
+    overflow: auto;
   }
 </style>
 
 <main>
-  {@render children()}
+  <UpdateBanner />
+  <div class="layout-content">
+    {@render children()}
+  </div>
 </main>
