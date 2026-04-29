@@ -7,10 +7,12 @@ import type {
   IdentityStatusDto,
   InboundMessageEvent,
   InviteDto,
-  MessageDto
+  MessageDto,
+  UpdateAvailableDto
 } from './types';
 
 export const INBOX_EVENT = 'ghost://message-received';
+export const UPDATE_PROGRESS_EVENT = 'ghost://update-progress';
 
 export async function identityStatus(): Promise<IdentityStatusDto> {
   return invoke('identity_status');
@@ -59,4 +61,23 @@ export async function onInbound(
   cb: (e: InboundMessageEvent) => void
 ): Promise<UnlistenFn> {
   return listen<InboundMessageEvent>(INBOX_EVENT, (event) => cb(event.payload));
+}
+
+export async function checkForUpdate(): Promise<UpdateAvailableDto | null> {
+  return invoke('check_for_update');
+}
+
+export async function downloadAndInstallUpdate(): Promise<void> {
+  return invoke('download_and_install_update');
+}
+
+export interface UpdateProgress {
+  chunk: number;
+  total: number;
+}
+
+export async function onUpdateProgress(
+  cb: (p: UpdateProgress) => void
+): Promise<UnlistenFn> {
+  return listen<UpdateProgress>(UPDATE_PROGRESS_EVENT, (event) => cb(event.payload));
 }
