@@ -84,7 +84,7 @@ jobs:
         id: artifacts
         shell: bash
         run: |
-          MSI="$(ls target/release/bundle/msi/ghost-desktop_*.msi | head -1)"
+          MSI="$(ls target/release/bundle/msi/Ghost_*.msi | head -1)"
           if [[ -z "${MSI}" ]]; then
             echo "ERROR: no .msi produced under target/release/bundle/msi/" >&2
             exit 1
