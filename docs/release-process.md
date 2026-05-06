@@ -33,12 +33,19 @@ the passphrase wouldn't help anyway).
 Run:
 
 ```bash
-tail -1 apps/ghost-desktop/minisign.pub
+base64 -w0 apps/ghost-desktop/minisign.pub
 ```
 
-Copy the output (starts with `RWQ...`). Edit `apps/ghost-desktop/tauri.conf.json`
-and replace `RWQ_PASTE_THE_BASE64_LINE_FROM_minisign.pub_HERE` in
-`plugins.updater.pubkey` with the actual key.
+This produces a single base64 line of the **entire** `.pub` file (including
+the `untrusted comment:` header and the key itself). Paste this base64 string
+into `plugins.updater.pubkey` in `apps/ghost-desktop/tauri.conf.json`.
+
+Common mistake: pasting only the second line of the `.pub` file (the line
+starting with `RWQ...`/`RWS...`). That looks like base64 too, but the Tauri
+updater plugin will base64-decode it and try to interpret the result as the
+text of a `.pub` file — which fails because the result is the raw 42-byte
+binary key, not multi-line text. Symptom: `The signature ... could not be
+decoded ...` error in the running app when the user clicks "Перезапустить".
 
 Commit and push.
 

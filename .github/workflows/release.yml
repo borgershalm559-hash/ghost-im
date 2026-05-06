@@ -126,7 +126,10 @@ jobs:
           VERSION="${GITHUB_REF_NAME#v}"   # strip leading v
           MSI_NAME="${{ steps.artifacts.outputs.msi_name }}"
           MSI_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/${MSI_NAME}"
-          SIG=$(cat "${{ steps.artifacts.outputs.msi_path }}.sig")
+          # Tauri's updater plugin base64-decodes the signature field, then
+          # parses the decoded text as a minisign signature file. So we must
+          # base64-encode the raw .sig file's contents (multi-line text) here.
+          SIG=$(base64 -w0 "${{ steps.artifacts.outputs.msi_path }}.sig")
           PUB_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
           # Notes from the tag annotation (if any).
