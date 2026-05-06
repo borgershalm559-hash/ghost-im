@@ -41,9 +41,16 @@ jobs:
         shell: pwsh
         run: choco install strawberryperl -y --no-progress
 
-      - name: Install minisign
+      - name: Install minisign 0.12
         shell: pwsh
-        run: choco install minisign -y --no-progress
+        run: |
+          # Use official binary directly. Chocolatey's `minisign` package lags
+          # at 0.10/0.11 which lacks the `-W` flag and may not read unencrypted
+          # secret keys (the format we generate locally via `minisign -G -W`).
+          $url = "https://github.com/jedisct1/minisign/releases/download/0.12/minisign-0.12-win64.zip"
+          Invoke-WebRequest -Uri $url -OutFile "$env:RUNNER_TEMP\minisign.zip"
+          Expand-Archive "$env:RUNNER_TEMP\minisign.zip" -DestinationPath "$env:RUNNER_TEMP\minisign"
+          echo "$env:RUNNER_TEMP\minisign\minisign-win64\x86_64" >> $env:GITHUB_PATH
 
       - name: Setup Node 20
         uses: actions/setup-node@v4
@@ -103,14 +110,10 @@ jobs:
           printf '%s\n' "${MINISIGN_PRIVATE_KEY}" > "${KEYFILE}"
           chmod 600 "${KEYFILE}"
 
-          # Sign the MSI.
-          # -W tells minisign to read passphrase from MINISIGN_PASSWORD env var.
-          # We set MINISIGN_PASSWORD to empty since the CI key was generated
-          # with an empty passphrase (see release-process.md). If you used
-          # a non-empty passphrase locally, set the MINISIGN_PASSWORD secret
-          # in repo settings as well.
-          MINISIGN_PASSWORD="${{ secrets.MINISIGN_PASSWORD }}" \
-          minisign -S -W -s "${KEYFILE}" -m "${{ steps.artifacts.outputs.msi_path }}"
+          # The signing key is unencrypted (generated locally with `minisign -G -W`),
+          # so no password is needed. minisign 0.12 reads the unencrypted key
+          # transparently.
+          minisign -S -s "${KEYFILE}" -m "${{ steps.artifacts.outputs.msi_path }}"
 
           rm -f "${KEYFILE}"
 
