@@ -1957,7 +1957,7 @@ dependencies = [
 
 [[package]]
 name = "ghost-app"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "ghost-client",
  "ghost-core",
@@ -1974,7 +1974,7 @@ dependencies = [
 
 [[package]]
 name = "ghost-client"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "bech32",
  "blake3",
@@ -2005,7 +2005,7 @@ dependencies = [
 
 [[package]]
 name = "ghost-core"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "bech32",
  "blake3",
@@ -2018,7 +2018,7 @@ dependencies = [
 
 [[package]]
 name = "ghost-desktop"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "ghost-app",
  "serde_json",
@@ -2032,7 +2032,7 @@ dependencies = [
 
 [[package]]
 name = "ghost-identity"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "argon2",
  "base64 0.22.1",
@@ -2058,7 +2058,7 @@ dependencies = [
 
 [[package]]
 name = "ghost-identity-cli"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "anyhow",
  "clap",
@@ -2068,7 +2068,7 @@ dependencies = [
 
 [[package]]
 name = "ghost-network"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "async-trait",
  "blake3",
@@ -2089,7 +2089,7 @@ dependencies = [
 
 [[package]]
 name = "ghost-protocol"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "blake3",
  "chacha20poly1305",
@@ -2116,7 +2116,7 @@ dependencies = [
 
 [[package]]
 name = "ghost-server"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "blake3",
  "ciborium",
@@ -2136,7 +2136,7 @@ dependencies = [
 
 [[package]]
 name = "ghost-storage"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "blake3",
  "ghost-core",
