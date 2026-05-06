@@ -112,8 +112,11 @@ jobs:
 
           # The signing key is unencrypted (generated locally with `minisign -G -W`),
           # so no password is needed. minisign 0.12 reads the unencrypted key
-          # transparently.
-          minisign -S -s "${KEYFILE}" -m "${{ steps.artifacts.outputs.msi_path }}"
+          # transparently. `-x` forces the `.sig` extension; the default since
+          # 0.12 is `.minisig`, but downstream steps and docs expect `.sig`.
+          minisign -S -s "${KEYFILE}" \
+            -m "${{ steps.artifacts.outputs.msi_path }}" \
+            -x "${{ steps.artifacts.outputs.msi_path }}.sig"
 
           rm -f "${KEYFILE}"
 
