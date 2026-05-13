@@ -83,3 +83,38 @@ export async function onUpdateProgress(
 ): Promise<UnlistenFn> {
   return listen<UpdateProgress>(UPDATE_PROGRESS_EVENT, (event) => cb(event.payload));
 }
+
+// ─── Per-contact actions ────────────────────────────────────────────────────
+
+export async function setPinned(contact_ghost_id: string, pinned: boolean): Promise<void> {
+  return invoke('set_pinned', { contactGhostId: contact_ghost_id, pinned });
+}
+
+export async function setMuted(contact_ghost_id: string, muted: boolean): Promise<void> {
+  return invoke('set_muted', { contactGhostId: contact_ghost_id, muted });
+}
+
+export async function setVerified(contact_ghost_id: string, verified: boolean): Promise<void> {
+  return invoke('set_verified', { contactGhostId: contact_ghost_id, verified });
+}
+
+export async function setRetention(
+  contact_ghost_id: string,
+  seconds: number | null
+): Promise<void> {
+  return invoke('set_retention', { contactGhostId: contact_ghost_id, seconds });
+}
+
+export async function markChatRead(contact_ghost_id: string): Promise<void> {
+  return invoke('mark_chat_read', { contactGhostId: contact_ghost_id });
+}
+
+// ─── Settings ───────────────────────────────────────────────────────────────
+
+export async function getSetting(key: string): Promise<string | null> {
+  return invoke('get_setting', { key });
+}
+
+export async function setSetting(key: string, value: string): Promise<void> {
+  return invoke('set_setting', { key, value });
+}
