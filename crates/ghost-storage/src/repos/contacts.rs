@@ -162,6 +162,61 @@ impl<'a> ContactsRepo<'a> {
         })
     }
 
+    pub fn set_pinned(&self, id: &GhostId, pinned: bool) -> Result<()> {
+        self.exec_setter(
+            "UPDATE contacts SET pinned = ?2 WHERE ghost_id = ?1",
+            params![id.as_bytes(), pinned as i64],
+            id,
+        )
+    }
+
+    pub fn set_muted(&self, id: &GhostId, muted: bool) -> Result<()> {
+        self.exec_setter(
+            "UPDATE contacts SET muted = ?2 WHERE ghost_id = ?1",
+            params![id.as_bytes(), muted as i64],
+            id,
+        )
+    }
+
+    pub fn set_verified(&self, id: &GhostId, verified: bool) -> Result<()> {
+        let v = if verified {
+            Verification::Verified
+        } else {
+            Verification::Unverified
+        };
+        self.exec_setter(
+            "UPDATE contacts SET verification = ?2 WHERE ghost_id = ?1",
+            params![id.as_bytes(), v as i64],
+            id,
+        )
+    }
+
+    pub fn set_retention(&self, id: &GhostId, seconds: Option<i64>) -> Result<()> {
+        self.exec_setter(
+            "UPDATE contacts SET retention_seconds = ?2 WHERE ghost_id = ?1",
+            params![id.as_bytes(), seconds],
+            id,
+        )
+    }
+
+    pub fn set_last_read_at(&self, id: &GhostId, at: i64) -> Result<()> {
+        self.exec_setter(
+            "UPDATE contacts SET last_read_at = ?2 WHERE ghost_id = ?1",
+            params![id.as_bytes(), at],
+            id,
+        )
+    }
+
+    fn exec_setter(&self, sql: &str, p: impl rusqlite::Params, id: &GhostId) -> Result<()> {
+        self.db.with_tx(|tx| {
+            let n = tx.execute(sql, p)?;
+            if n == 0 {
+                return Err(StorageError::NotFound(format!("contact {id}")));
+            }
+            Ok(())
+        })
+    }
+
     fn row_to_contact(row: &rusqlite::Row<'_>) -> Result<Contact> {
         let ghost_id_bytes: Vec<u8> = row.get(0)?;
         if ghost_id_bytes.len() != 32 {
@@ -331,5 +386,79 @@ mod tests {
         db.contacts().insert(&c).unwrap();
         let loaded = db.contacts().get(&c.ghost_id).unwrap().unwrap();
         assert_eq!(loaded.dk_pub, Some([42u8; 32]));
+    }
+
+    #[test]
+    fn set_pinned_toggles_field() {
+        let db = fresh_db();
+        let c = fake_contact(20, "Pin");
+        db.contacts().insert(&c).unwrap();
+        db.contacts().set_pinned(&c.ghost_id, true).unwrap();
+        assert!(db.contacts().get(&c.ghost_id).unwrap().unwrap().pinned);
+        db.contacts().set_pinned(&c.ghost_id, false).unwrap();
+        assert!(!db.contacts().get(&c.ghost_id).unwrap().unwrap().pinned);
+    }
+
+    #[test]
+    fn set_muted_toggles_field() {
+        let db = fresh_db();
+        let c = fake_contact(21, "Mute");
+        db.contacts().insert(&c).unwrap();
+        db.contacts().set_muted(&c.ghost_id, true).unwrap();
+        assert!(db.contacts().get(&c.ghost_id).unwrap().unwrap().muted);
+    }
+
+    #[test]
+    fn set_verified_writes_correct_enum() {
+        let db = fresh_db();
+        let c = fake_contact(22, "Verify");
+        db.contacts().insert(&c).unwrap();
+        db.contacts().set_verified(&c.ghost_id, true).unwrap();
+        assert_eq!(
+            db.contacts().get(&c.ghost_id).unwrap().unwrap().verification,
+            Verification::Verified
+        );
+        db.contacts().set_verified(&c.ghost_id, false).unwrap();
+        assert_eq!(
+            db.contacts().get(&c.ghost_id).unwrap().unwrap().verification,
+            Verification::Unverified
+        );
+    }
+
+    #[test]
+    fn set_retention_writes_seconds_or_null() {
+        let db = fresh_db();
+        let c = fake_contact(23, "Retain");
+        db.contacts().insert(&c).unwrap();
+        db.contacts().set_retention(&c.ghost_id, Some(86400)).unwrap();
+        assert_eq!(
+            db.contacts().get(&c.ghost_id).unwrap().unwrap().retention_seconds,
+            Some(86400)
+        );
+        db.contacts().set_retention(&c.ghost_id, None).unwrap();
+        assert_eq!(
+            db.contacts().get(&c.ghost_id).unwrap().unwrap().retention_seconds,
+            None
+        );
+    }
+
+    #[test]
+    fn set_last_read_at_writes_value() {
+        let db = fresh_db();
+        let c = fake_contact(24, "Read");
+        db.contacts().insert(&c).unwrap();
+        db.contacts().set_last_read_at(&c.ghost_id, 1_700_000_000).unwrap();
+        assert_eq!(
+            db.contacts().get(&c.ghost_id).unwrap().unwrap().last_read_at,
+            1_700_000_000
+        );
+    }
+
+    #[test]
+    fn setter_on_missing_returns_not_found() {
+        let db = fresh_db();
+        let id = GhostId::from_bytes([99; 32]);
+        let err = db.contacts().set_pinned(&id, true).unwrap_err();
+        assert!(matches!(err, StorageError::NotFound(_)));
     }
 }

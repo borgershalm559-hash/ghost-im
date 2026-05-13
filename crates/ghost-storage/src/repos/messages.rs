@@ -144,6 +144,25 @@ impl<'a> MessagesRepo<'a> {
         })
     }
 
+    /// Number of incoming messages for `contact` whose `received_at` is strictly
+    /// greater than `since`. Used by the UI to compute the unread badge.
+    pub fn unread_count(&self, contact: &GhostId, since: i64) -> Result<i64> {
+        self.db.with_conn(|c| {
+            let mut stmt = c.prepare(
+                "SELECT COUNT(*) FROM messages
+                  WHERE contact_id = ?1
+                    AND direction = ?2
+                    AND received_at IS NOT NULL
+                    AND received_at > ?3",
+            )?;
+            let n: i64 = stmt.query_row(
+                params![contact.as_bytes(), Direction::Incoming as i64, since],
+                |r| r.get(0),
+            )?;
+            Ok(n)
+        })
+    }
+
     fn row_to_struct(row: &rusqlite::Row<'_>) -> Result<MessageRow> {
         let uuid_bytes: Vec<u8> = row.get(0)?;
         if uuid_bytes.len() != 16 {
@@ -301,6 +320,24 @@ mod tests {
             .unwrap();
         let list = db.messages().list_for_contact(&contact, 10, 0).unwrap();
         assert_eq!(list[0].status, MessageStatus::Delivered);
+    }
+
+    #[test]
+    fn unread_count_returns_only_incoming_after_since() {
+        let (db, contact) = fresh_db_with_contact(50);
+        db.messages()
+            .insert(&msg(1, contact, Direction::Outgoing, 100))
+            .unwrap();
+        let mut a = msg(2, contact, Direction::Incoming, 200);
+        a.received_at = Some(200);
+        db.messages().insert(&a).unwrap();
+        let mut b = msg(3, contact, Direction::Incoming, 300);
+        b.received_at = Some(300);
+        db.messages().insert(&b).unwrap();
+
+        assert_eq!(db.messages().unread_count(&contact, 199).unwrap(), 2);
+        assert_eq!(db.messages().unread_count(&contact, 250).unwrap(), 1);
+        assert_eq!(db.messages().unread_count(&contact, 999).unwrap(), 0);
     }
 
     #[test]
