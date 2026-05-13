@@ -35,6 +35,14 @@ pub struct Contact {
     pub notes: Option<String>,
     pub blocked: bool,
     pub dk_pub: Option<[u8; 32]>,
+    /// UNIX seconds — messages with received_at > this are unread (default 0).
+    pub last_read_at: i64,
+    /// Pinned chats sort first in the UI list.
+    pub pinned: bool,
+    /// Mutes notifications (UI-only until OS notifications land).
+    pub muted: bool,
+    /// `None` = forever. Otherwise: new messages get `expires_at = now + seconds`.
+    pub retention_seconds: Option<i64>,
 }
 
 pub struct ContactsRepo<'a> {
@@ -52,8 +60,9 @@ impl<'a> ContactsRepo<'a> {
             tx.execute(
                 "INSERT INTO contacts (
                     ghost_id, display_name, local_alias, fingerprint, added_at,
-                    last_endpoint, verification, notes, blocked, dk_pub
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                    last_endpoint, verification, notes, blocked, dk_pub,
+                    last_read_at, pinned, muted, retention_seconds
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
                 params![
                     contact.ghost_id.as_bytes(),
                     contact.display_name,
@@ -65,6 +74,10 @@ impl<'a> ContactsRepo<'a> {
                     contact.notes,
                     contact.blocked as i64,
                     contact.dk_pub.as_ref().map(|b| &b[..]),
+                    contact.last_read_at,
+                    contact.pinned as i64,
+                    contact.muted as i64,
+                    contact.retention_seconds,
                 ],
             )?;
             Ok(())
@@ -76,7 +89,8 @@ impl<'a> ContactsRepo<'a> {
         self.db.with_conn(|c| {
             let mut stmt = c.prepare(
                 "SELECT ghost_id, display_name, local_alias, fingerprint, added_at,
-                        last_endpoint, verification, notes, blocked, dk_pub
+                        last_endpoint, verification, notes, blocked, dk_pub,
+                        last_read_at, pinned, muted, retention_seconds
                    FROM contacts WHERE ghost_id = ?1",
             )?;
             let mut rows = stmt.query(params![id.as_bytes()])?;
@@ -92,7 +106,8 @@ impl<'a> ContactsRepo<'a> {
         self.db.with_conn(|c| {
             let mut stmt = c.prepare(
                 "SELECT ghost_id, display_name, local_alias, fingerprint, added_at,
-                        last_endpoint, verification, notes, blocked, dk_pub
+                        last_endpoint, verification, notes, blocked, dk_pub,
+                        last_read_at, pinned, muted, retention_seconds
                    FROM contacts ORDER BY added_at ASC",
             )?;
             let rows = stmt
@@ -175,6 +190,8 @@ impl<'a> ContactsRepo<'a> {
                 Some(arr)
             }
         };
+        let pinned: i64 = row.get(11)?;
+        let muted: i64 = row.get(12)?;
         Ok(Contact {
             ghost_id: GhostId::from_bytes(id_arr),
             display_name: row.get(1)?,
@@ -186,6 +203,10 @@ impl<'a> ContactsRepo<'a> {
             notes: row.get(7)?,
             blocked: blocked != 0,
             dk_pub,
+            last_read_at: row.get(10)?,
+            pinned: pinned != 0,
+            muted: muted != 0,
+            retention_seconds: row.get(13)?,
         })
     }
 }
@@ -223,6 +244,10 @@ mod tests {
             notes: None,
             blocked: false,
             dk_pub: None,
+            last_read_at: 0,
+            pinned: false,
+            muted: false,
+            retention_seconds: None,
         }
     }
 

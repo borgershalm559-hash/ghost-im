@@ -333,6 +333,10 @@ impl Client {
             notes: None,
             blocked: false,
             dk_pub: None,
+            last_read_at: 0,
+            pinned: false,
+            muted: false,
+            retention_seconds: None,
         };
         let existing = self.db.contacts().get(&invite.ghost_id)?;
         if existing.is_some() {
@@ -603,6 +607,10 @@ async fn handle_mls_handshake(
         notes: None,
         blocked: false,
         dk_pub: None,
+        last_read_at: 0,
+        pinned: false,
+        muted: false,
+        retention_seconds: None,
     };
     let existing = db.contacts().get(&sender_id)?;
     if existing.is_some() {

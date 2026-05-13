@@ -136,6 +136,10 @@ mod tests {
                 notes: None,
                 blocked: false,
                 dk_pub: None,
+                last_read_at: 0,
+                pinned: false,
+                muted: false,
+                retention_seconds: None,
             })
             .unwrap();
         id
