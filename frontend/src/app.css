@@ -69,6 +69,14 @@ body {
   letter-spacing: -0.05px;
 }
 
+/* SvelteKit wraps every page in this div (see app.html). Without explicit
+   height: 100% here, child layouts that use `height: 100%` collapse to 0. */
+#app {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
 * {
   box-sizing: border-box;
 }

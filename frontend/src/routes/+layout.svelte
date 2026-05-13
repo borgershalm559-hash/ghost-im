@@ -79,24 +79,35 @@
 
 <UpdateBanner />
 
-{#if booting}
-  <div class="boot">Загрузка…</div>
-{:else if bootError}
-  <div class="boot err">{bootError}</div>
-{:else if isOnboarding}
-  {@render children()}
-{:else}
-  <ShellLayout>
+<div class="content">
+  {#if booting}
+    <div class="boot">Загрузка…</div>
+  {:else if bootError}
+    <div class="boot err">{bootError}</div>
+  {:else if isOnboarding}
     {@render children()}
-  </ShellLayout>
-{/if}
+  {:else}
+    <ShellLayout>
+      {@render children()}
+    </ShellLayout>
+  {/if}
+</div>
 
 <style>
+  /* .content takes all remaining height after UpdateBanner (which is sticky
+     but doesn't reserve space when hidden, and reserves its banner-height
+     when visible). Flexbox in #app from app.css gives us this. */
+  .content {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
   .boot {
     display: flex;
     align-items: center;
     justify-content: center;
-    height: 100vh;
+    flex: 1;
     color: var(--text-dim);
     font-size: 14px;
   }

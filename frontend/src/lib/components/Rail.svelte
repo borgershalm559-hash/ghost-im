@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { goto } from '$app/navigation';
   import Icon from './Icon.svelte';
   import Avatar from './Avatar.svelte';
   import { store } from '$lib/state.svelte';
@@ -28,6 +29,13 @@
   let { onProfileClick }: Props = $props();
 
   let avatarName = $derived(store.info?.fingerprint ?? '?');
+
+  function clickFolder(f: Folder) {
+    if (f.decorative) return;
+    // "All" navigates to home (which shows chat list on narrow viewports,
+    // empty state on wide ones).
+    if (f.id === 'all') void goto('/');
+  }
 </script>
 
 <aside class="rail">
@@ -38,6 +46,8 @@
       class:active={f.id === 'all'}
       class:decorative={f.decorative}
       disabled={f.decorative}
+      onclick={() => clickFolder(f)}
+      title={f.decorative ? 'Папки появятся в следующих версиях' : f.label}
     >
       <span class="ic">
         <Icon

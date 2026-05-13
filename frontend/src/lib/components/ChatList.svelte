@@ -51,7 +51,7 @@
   }
 </script>
 
-<aside class="list">
+<aside class="list chat-list">
   <header>
     <div>
       <div class="title">Все</div>
