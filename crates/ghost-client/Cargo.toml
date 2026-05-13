@@ -28,6 +28,7 @@ openmls = { workspace = true }
 openmls_traits = { workspace = true }
 
 thiserror = { workspace = true }
+tracing = { workspace = true }
 rand = { workspace = true }
 uuid = { workspace = true }
 x25519-dalek = { workspace = true }

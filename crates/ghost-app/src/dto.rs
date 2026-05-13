@@ -42,6 +42,19 @@ pub struct ContactDto {
     pub local_alias: Option<String>,
     pub added_at: i64,
     pub verified: bool,
+    pub pinned: bool,
+    pub muted: bool,
+    pub retention_seconds: Option<i64>,
+
+    /// Last message text (truncated server-side to 200 chars), `None` if no messages.
+    pub last_message: Option<String>,
+    /// `sent_at` of the last message.
+    pub last_message_at: Option<i64>,
+    /// `"in"` | `"out"` | `null`.
+    pub last_message_direction: Option<String>,
+
+    /// Count of incoming messages with `received_at > last_read_at`.
+    pub unread_count: i64,
 }
 
 /// Result of `list_messages` command.

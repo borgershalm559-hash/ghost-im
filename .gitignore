@@ -13,3 +13,5 @@ ghost.db*
 .idea/
 .vscode/
 .superpowers/
+.claude/
+frontend/pnpm-workspace.yaml

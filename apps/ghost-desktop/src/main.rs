@@ -5,7 +5,9 @@
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use ghost_app::commands::{identity, lifecycle, read, updater, write};
+use ghost_app::commands::{
+    contact_actions, identity, lifecycle, read, settings as settings_cmd, updater, write,
+};
 use ghost_app::AppState;
 use tauri::Manager;
 
@@ -33,6 +35,13 @@ fn main() {
             updater::download_and_install_update,
             write::add_contact,
             write::send_message,
+            contact_actions::set_pinned,
+            contact_actions::set_muted,
+            contact_actions::set_verified,
+            contact_actions::set_retention,
+            contact_actions::mark_chat_read,
+            settings_cmd::get_setting,
+            settings_cmd::set_setting,
         ])
         .setup(|app| {
             // Reserved for future use (shutdown hook, switch-identity flow).

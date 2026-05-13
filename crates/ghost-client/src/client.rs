@@ -116,6 +116,7 @@ impl Client {
             mls_provider,
         };
 
+        spawn_retention_scrubber(client.db.clone());
         client.ensure_keypackages().await?;
         Ok(client)
     }
@@ -175,6 +176,7 @@ impl Client {
             mls_provider,
         };
 
+        spawn_retention_scrubber(client.db.clone());
         client.ensure_keypackages().await?;
         Ok(client)
     }
@@ -366,6 +368,56 @@ impl Client {
         Ok(self.db.contacts().list()?)
     }
 
+    pub fn get_setting(&self, key: &str) -> Result<Option<String>> {
+        Ok(self.db.settings().get(key)?)
+    }
+
+    pub fn set_setting(&self, key: &str, value: &str) -> Result<()> {
+        Ok(self.db.settings().set(key, value)?)
+    }
+
+    pub fn set_pinned(&self, id: &ghost_core::GhostId, pinned: bool) -> Result<()> {
+        Ok(self.db.contacts().set_pinned(id, pinned)?)
+    }
+
+    pub fn set_muted(&self, id: &ghost_core::GhostId, muted: bool) -> Result<()> {
+        Ok(self.db.contacts().set_muted(id, muted)?)
+    }
+
+    pub fn set_verified(&self, id: &ghost_core::GhostId, verified: bool) -> Result<()> {
+        Ok(self.db.contacts().set_verified(id, verified)?)
+    }
+
+    pub fn set_retention(&self, id: &ghost_core::GhostId, seconds: Option<i64>) -> Result<()> {
+        Ok(self.db.contacts().set_retention(id, seconds)?)
+    }
+
+    pub fn mark_chat_read(&self, id: &ghost_core::GhostId) -> Result<()> {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+        Ok(self.db.contacts().set_last_read_at(id, now)?)
+    }
+
+    pub fn last_message_for_contact(
+        &self,
+        contact_id: &ghost_core::GhostId,
+    ) -> Result<Option<MessageRow>> {
+        let mut all = self.db.messages().list_for_contact(contact_id, 100_000, 0)?;
+        Ok(all.pop())
+    }
+
+    pub fn unread_count(&self, contact_id: &ghost_core::GhostId) -> Result<i64> {
+        let last_read_at = self
+            .db
+            .contacts()
+            .get(contact_id)?
+            .map(|c| c.last_read_at)
+            .unwrap_or(0);
+        Ok(self.db.messages().unread_count(contact_id, last_read_at)?)
+    }
+
     /// Encrypt and send a text message to a contact.
     pub async fn send_message(&self, contact_id: ghost_core::GhostId, text: &str) -> Result<()> {
         let now = std::time::SystemTime::now()
@@ -433,7 +485,7 @@ impl Client {
             .send_inbox(peer_id, address, envelope_bytes)
             .await?;
 
-        // Persist outgoing message.
+        // Persist outgoing message. Stamp expires_at from contact retention.
         let msg_uuid = *Uuid::now_v7().as_bytes();
         self.db.messages().insert(&MessageRow {
             msg_uuid,
@@ -445,7 +497,7 @@ impl Client {
             received_at: None,
             status: MessageStatus::Sent,
             reply_to: None,
-            expires_at: None,
+            expires_at: contact.retention_seconds.map(|s| now as i64 + s),
         })?;
 
         // Persist advanced MLS state.
@@ -509,6 +561,27 @@ impl Client {
         });
         Ok(handle)
     }
+}
+
+/// Spawn a 60s-tick background task that deletes messages whose `expires_at`
+/// is past now. The JoinHandle is intentionally dropped — the task lives for
+/// the process lifetime (the underlying DB Arc keeps it alive as long as the
+/// Client exists; when the Client drops, the DB Arc count drops and the next
+/// purge call errors, which simply ends the task).
+fn spawn_retention_scrubber(db: Arc<Database>) {
+    tokio::spawn(async move {
+        let mut tick = tokio::time::interval(std::time::Duration::from_secs(60));
+        loop {
+            tick.tick().await;
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs() as i64)
+                .unwrap_or(0);
+            if let Err(e) = db.messages().purge_expired(now) {
+                tracing::warn!(target: "ghost-client", "purge_expired failed: {e}");
+            }
+        }
+    });
 }
 
 async fn process_envelope(

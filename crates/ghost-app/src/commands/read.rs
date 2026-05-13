@@ -26,18 +26,48 @@ pub async fn client_info(state: State<'_, AppState>) -> CommandResult<ClientInfo
 pub async fn list_contacts(state: State<'_, AppState>) -> CommandResult<Vec<ContactDto>> {
     let client = state.require_client().await?;
     let rows = client.list_contacts()?;
-    let out = rows
-        .into_iter()
-        .map(|c| ContactDto {
+    let mut out = Vec::with_capacity(rows.len());
+    for c in rows {
+        let last = client.last_message_for_contact(&c.ghost_id)?;
+        let (last_message, last_message_at, last_message_direction) = match last {
+            Some(m) => (
+                Some(truncate(&m.content, 200)),
+                Some(m.sent_at),
+                Some(match m.direction {
+                    ghost_storage::Direction::Incoming => "in".to_string(),
+                    ghost_storage::Direction::Outgoing => "out".to_string(),
+                }),
+            ),
+            None => (None, None, None),
+        };
+        let unread_count = client.unread_count(&c.ghost_id)?;
+        out.push(ContactDto {
             ghost_id: c.ghost_id.to_string(),
             fingerprint: c.fingerprint,
             display_name: c.display_name,
             local_alias: c.local_alias,
             added_at: c.added_at,
             verified: matches!(c.verification, Verification::Verified),
-        })
-        .collect();
+            pinned: c.pinned,
+            muted: c.muted,
+            retention_seconds: c.retention_seconds,
+            last_message,
+            last_message_at,
+            last_message_direction,
+            unread_count,
+        });
+    }
     Ok(out)
+}
+
+fn truncate(s: &str, max: usize) -> String {
+    if s.chars().count() <= max {
+        s.to_string()
+    } else {
+        let mut t: String = s.chars().take(max - 1).collect();
+        t.push('…');
+        t
+    }
 }
 
 /// Messages for a contact, oldest first.
