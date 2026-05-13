@@ -12,3 +12,4 @@ ghost.db*
 .ghost/
 .idea/
 .vscode/
+.superpowers/
