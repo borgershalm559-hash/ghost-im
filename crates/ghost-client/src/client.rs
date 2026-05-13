@@ -418,6 +418,47 @@ impl Client {
         Ok(self.db.messages().unread_count(contact_id, last_read_at)?)
     }
 
+    // Folder CRUD ───────────────────────────────────────────────────────────
+
+    pub fn list_folders(&self) -> Result<Vec<ghost_storage::Folder>> {
+        Ok(self.db.folders().list()?)
+    }
+
+    pub fn create_folder(&self, name: &str, icon: Option<&str>, now: i64) -> Result<i64> {
+        Ok(self.db.folders().create(name, icon, 0, now)?)
+    }
+
+    pub fn rename_folder(&self, id: i64, new_name: &str) -> Result<()> {
+        Ok(self.db.folders().rename(id, new_name)?)
+    }
+
+    pub fn delete_folder(&self, id: i64) -> Result<bool> {
+        Ok(self.db.folders().delete(id)?)
+    }
+
+    pub fn add_contact_to_folder(
+        &self,
+        folder_id: i64,
+        contact_id: &ghost_core::GhostId,
+    ) -> Result<()> {
+        Ok(self.db.folders().add_contact(folder_id, contact_id)?)
+    }
+
+    pub fn remove_contact_from_folder(
+        &self,
+        folder_id: i64,
+        contact_id: &ghost_core::GhostId,
+    ) -> Result<()> {
+        Ok(self.db.folders().remove_contact(folder_id, contact_id)?)
+    }
+
+    pub fn contacts_for_folder(
+        &self,
+        folder_id: i64,
+    ) -> Result<Vec<ghost_core::GhostId>> {
+        Ok(self.db.folders().contacts_in_folder(folder_id)?)
+    }
+
     /// Encrypt and send a text message to a contact.
     pub async fn send_message(&self, contact_id: ghost_core::GhostId, text: &str) -> Result<()> {
         let now = std::time::SystemTime::now()

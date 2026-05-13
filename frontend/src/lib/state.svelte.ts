@@ -14,6 +14,11 @@ class AppStore {
   /** Sidebar search filter (local; not persisted). */
   searchQuery = $state('');
 
+  /** Currently selected folder in the left rail. 'all' is the only one
+   * with real contact data wired through; the rest are placeholders that
+   * show a "coming soon" message in the chat list. */
+  activeFolder = $state('all');
+
   setInfo(info: ClientInfoDto | null) {
     this.info = info;
   }
@@ -48,6 +53,10 @@ class AppStore {
 
   setSearchQuery(q: string) {
     this.searchQuery = q;
+  }
+
+  setActiveFolder(id: string) {
+    this.activeFolder = id;
   }
 }
 

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { goto } from '$app/navigation';
   import { store } from '$lib/state.svelte';
   import { persistTheme } from '$lib/theme';
   import { setSetting } from '$lib/tauri';
@@ -23,6 +24,11 @@
     } catch {
       // settings unavailable (e.g. client not open yet) — keep visual state
     }
+  }
+
+  function openSettings() {
+    onClose();
+    void goto('/settings');
   }
 </script>
 
@@ -59,6 +65,7 @@
     <div class="divider"></div>
 
     <button type="button" class="action" onclick={onShowIdentity}>Показать мой Ghost ID</button>
+    <button type="button" class="action" onclick={openSettings}>Настройки и бэкап…</button>
   </div>
 {/if}
 

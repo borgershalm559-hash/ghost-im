@@ -31,9 +31,10 @@
   let avatarName = $derived(store.info?.fingerprint ?? '?');
 
   function clickFolder(f: Folder) {
-    if (f.decorative) return;
+    store.setActiveFolder(f.id);
     // "All" navigates to home (which shows chat list on narrow viewports,
-    // empty state on wide ones).
+    // empty state on wide ones). Decorative folders just set state — chat
+    // list will render a "coming soon" placeholder.
     if (f.id === 'all') void goto('/');
   }
 </script>
@@ -43,9 +44,8 @@
     <button
       type="button"
       class="cell"
-      class:active={f.id === 'all'}
+      class:active={store.activeFolder === f.id}
       class:decorative={f.decorative}
-      disabled={f.decorative}
       onclick={() => clickFolder(f)}
       title={f.decorative ? 'Папки появятся в следующих версиях' : f.label}
     >
@@ -54,7 +54,7 @@
           name={f.icon}
           size={22}
           sw={1.8}
-          color={f.id === 'all' ? 'var(--accent)' : 'var(--text-dim)'}
+          color={store.activeFolder === f.id ? 'var(--accent)' : 'var(--text-dim)'}
         />
       </span>
       <span class="label">{f.label}</span>

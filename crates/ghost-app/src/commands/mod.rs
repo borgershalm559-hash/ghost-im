@@ -1,6 +1,8 @@
 //! Tauri command implementations.
 
+pub mod backup;
 pub mod contact_actions;
+pub mod folders;
 pub mod identity;
 pub mod lifecycle;
 pub mod read;

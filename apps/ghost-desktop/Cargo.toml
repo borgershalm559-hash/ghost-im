@@ -19,6 +19,10 @@ ghost-app = { path = "../../crates/ghost-app" }
 serde_json = "1"
 tauri = { workspace = true, features = [] }
 tauri-plugin-updater = { version = "2", features = ["native-tls"] }
+tauri-plugin-dialog = "2"
+tauri-plugin-fs = "2"
 tokio = { workspace = true }
 tracing = { workspace = true }
+tracing-appender = "0.2"
 tracing-subscriber = { workspace = true }
+directories = { workspace = true }

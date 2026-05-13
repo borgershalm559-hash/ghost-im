@@ -7,12 +7,13 @@
 use crate::{Database, Result, StorageError};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-pub const APP_SCHEMA_VERSION: u32 = 3;
+pub const APP_SCHEMA_VERSION: u32 = 4;
 
 const MIGRATIONS: &[(u32, &str)] = &[
     (1, include_str!("../migrations/0001_init.sql")),
     (2, include_str!("../migrations/0002_add_contact_dk_pub.sql")),
     (3, include_str!("../migrations/0003_contacts_extras.sql")),
+    (4, include_str!("../migrations/0004_folders.sql")),
 ];
 
 fn now_seconds() -> i64 {
@@ -133,7 +134,9 @@ mod tests {
         assert_eq!(
             tables,
             vec![
+                "contact_folders".to_string(),
                 "contacts".to_string(),
+                "folders".to_string(),
                 "inbox_dedup".to_string(),
                 "messages".to_string(),
                 "mls_groups".to_string(),

@@ -49,52 +49,81 @@
     if (last >= 2 && last <= 4) return 'чата';
     return 'чатов';
   }
+
+  const FOLDER_LABELS: Record<string, string> = {
+    all: 'Все',
+    personal: 'Личные',
+    work: 'Работа',
+    crypto: 'Crypto',
+    channels: 'Каналы',
+    burner: 'Burner',
+    archive: 'Архив',
+  };
+  let folderLabel = $derived(FOLDER_LABELS[store.activeFolder] ?? 'Все');
+  let placeholderMode = $derived(store.activeFolder !== 'all');
 </script>
 
 <aside class="list chat-list">
   <header>
     <div>
-      <div class="title">Все</div>
+      <div class="title">{folderLabel}</div>
       <div class="meta">
-        {store.contacts.length} {pluralizeChats(store.contacts.length)}
-        {#if totalUnread > 0} · {totalUnread} непрочит.{/if}
+        {#if placeholderMode}
+          В разработке
+        {:else}
+          {store.contacts.length} {pluralizeChats(store.contacts.length)}
+          {#if totalUnread > 0} · {totalUnread} непрочит.{/if}
+        {/if}
       </div>
     </div>
   </header>
 
-  <SearchBar
-    value={store.searchQuery}
-    placeholder="Поиск чатов"
-    onInput={(v) => store.setSearchQuery(v)}
-  />
+  {#if !placeholderMode}
+    <SearchBar
+      value={store.searchQuery}
+      placeholder="Поиск чатов"
+      onInput={(v) => store.setSearchQuery(v)}
+    />
+  {/if}
 
   <div class="scroll">
-    {#if pinned.length > 0}
-      <div class="section-label">Закреплённые</div>
-      {#each pinned as c (c.ghost_id)}
-        <ChatRow
-          contact={c}
-          selected={c.ghost_id === selectedId}
-          onClick={() => open(c)}
-          onContextMenu={(x, y) => (menu = { contact: c, x, y })}
-        />
-      {/each}
-    {/if}
+    {#if placeholderMode}
+      <div class="placeholder">
+        <div class="placeholder-icon">📁</div>
+        <div class="placeholder-title">Папка «{folderLabel}»</div>
+        <div class="placeholder-sub">
+          Функциональные папки появятся в следующей версии. Пока используйте «Все»
+          для просмотра контактов.
+        </div>
+      </div>
+    {:else}
+      {#if pinned.length > 0}
+        <div class="section-label">Закреплённые</div>
+        {#each pinned as c (c.ghost_id)}
+          <ChatRow
+            contact={c}
+            selected={c.ghost_id === selectedId}
+            onClick={() => open(c)}
+            onContextMenu={(x, y) => (menu = { contact: c, x, y })}
+          />
+        {/each}
+      {/if}
 
-    {#if rest.length > 0}
-      <div class="section-label">Все чаты</div>
-      {#each rest as c (c.ghost_id)}
-        <ChatRow
-          contact={c}
-          selected={c.ghost_id === selectedId}
-          onClick={() => open(c)}
-          onContextMenu={(x, y) => (menu = { contact: c, x, y })}
-        />
-      {/each}
-    {/if}
+      {#if rest.length > 0}
+        <div class="section-label">Все чаты</div>
+        {#each rest as c (c.ghost_id)}
+          <ChatRow
+            contact={c}
+            selected={c.ghost_id === selectedId}
+            onClick={() => open(c)}
+            onContextMenu={(x, y) => (menu = { contact: c, x, y })}
+          />
+        {/each}
+      {/if}
 
-    {#if store.contacts.length === 0}
-      <div class="empty">Контактов пока нет.</div>
+      {#if store.contacts.length === 0}
+        <div class="empty">Контактов пока нет.</div>
+      {/if}
     {/if}
   </div>
 </aside>
@@ -151,5 +180,28 @@
     text-align: center;
     color: var(--text-muted);
     font-size: 13px;
+  }
+  .placeholder {
+    padding: 60px 24px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+  }
+  .placeholder-icon {
+    font-size: 36px;
+    opacity: 0.5;
+  }
+  .placeholder-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-dim);
+  }
+  .placeholder-sub {
+    font-size: 12px;
+    color: var(--text-muted);
+    line-height: 1.6;
+    max-width: 260px;
   }
 </style>

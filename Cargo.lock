@@ -1957,13 +1957,14 @@ dependencies = [
 
 [[package]]
 name = "ghost-app"
-version = "0.0.5"
+version = "0.0.6"
 dependencies = [
  "ghost-client",
  "ghost-core",
  "ghost-identity",
  "ghost-storage",
  "hex",
+ "rand 0.8.6",
  "serde",
  "tauri",
  "tauri-plugin-updater",
@@ -1974,7 +1975,7 @@ dependencies = [
 
 [[package]]
 name = "ghost-client"
-version = "0.0.5"
+version = "0.0.6"
 dependencies = [
  "bech32",
  "blake3",
@@ -2006,7 +2007,7 @@ dependencies = [
 
 [[package]]
 name = "ghost-core"
-version = "0.0.5"
+version = "0.0.6"
 dependencies = [
  "bech32",
  "blake3",
@@ -2019,21 +2020,25 @@ dependencies = [
 
 [[package]]
 name = "ghost-desktop"
-version = "0.0.5"
+version = "0.0.6"
 dependencies = [
+ "directories",
  "ghost-app",
  "serde_json",
  "tauri",
  "tauri-build",
+ "tauri-plugin-dialog",
+ "tauri-plugin-fs",
  "tauri-plugin-updater",
  "tokio",
  "tracing",
+ "tracing-appender",
  "tracing-subscriber",
 ]
 
 [[package]]
 name = "ghost-identity"
-version = "0.0.5"
+version = "0.0.6"
 dependencies = [
  "argon2",
  "base64 0.22.1",
@@ -2059,7 +2064,7 @@ dependencies = [
 
 [[package]]
 name = "ghost-identity-cli"
-version = "0.0.5"
+version = "0.0.6"
 dependencies = [
  "anyhow",
  "clap",
@@ -2069,7 +2074,7 @@ dependencies = [
 
 [[package]]
 name = "ghost-network"
-version = "0.0.5"
+version = "0.0.6"
 dependencies = [
  "async-trait",
  "blake3",
@@ -2090,7 +2095,7 @@ dependencies = [
 
 [[package]]
 name = "ghost-protocol"
-version = "0.0.5"
+version = "0.0.6"
 dependencies = [
  "blake3",
  "chacha20poly1305",
@@ -2117,7 +2122,7 @@ dependencies = [
 
 [[package]]
 name = "ghost-server"
-version = "0.0.5"
+version = "0.0.6"
 dependencies = [
  "blake3",
  "ciborium",
@@ -2137,7 +2142,7 @@ dependencies = [
 
 [[package]]
 name = "ghost-storage"
-version = "0.0.5"
+version = "0.0.6"
 dependencies = [
  "blake3",
  "ghost-core",
@@ -5813,6 +5818,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "rfd"
+version = "0.16.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a15ad77d9e70a92437d8f74c35d99b4e4691128df018833e99f90bcd36152672"
+dependencies = [
+ "block2",
+ "dispatch2",
+ "glib-sys",
+ "gobject-sys",
+ "gtk-sys",
+ "js-sys",
+ "log",
+ "objc2",
+ "objc2-app-kit",
+ "objc2-core-foundation",
+ "objc2-foundation",
+ "raw-window-handle",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
+ "windows-sys 0.60.2",
+]
+
+[[package]]
 name = "ring"
 version = "0.17.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6668,6 +6697,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "symlink"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a7973cce6668464ea31f176d85b13c7ab3bba2cb3b77a2ed26abd7801688010a"
+
+[[package]]
 name = "syn"
 version = "1.0.109"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6944,6 +6979,48 @@ dependencies = [
  "tauri-utils",
  "toml 0.9.12+spec-1.1.0",
  "walkdir",
+]
+
+[[package]]
+name = "tauri-plugin-dialog"
+version = "2.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "65981abb771e74e571a38196c3baa11c459379164791eba0e67abc1a5fac9884"
+dependencies = [
+ "log",
+ "raw-window-handle",
+ "rfd",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-plugin",
+ "tauri-plugin-fs",
+ "thiserror 2.0.18",
+ "url",
+]
+
+[[package]]
+name = "tauri-plugin-fs"
+version = "2.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b7ecc274121aca0c036a2b42d1cbe83d368d348f54e0bb8a735c2b1548e8f371"
+dependencies = [
+ "anyhow",
+ "dunce",
+ "glob",
+ "log",
+ "objc2-foundation",
+ "percent-encoding",
+ "schemars 0.8.22",
+ "serde",
+ "serde_json",
+ "serde_repr",
+ "tauri",
+ "tauri-plugin",
+ "tauri-utils",
+ "thiserror 2.0.18",
+ "toml 1.1.2+spec-1.1.0",
+ "url",
 ]
 
 [[package]]
@@ -7475,6 +7552,19 @@ dependencies = [
  "pin-project-lite",
  "tracing-attributes",
  "tracing-core",
+]
+
+[[package]]
+name = "tracing-appender"
+version = "0.2.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "050686193eb999b4bb3bc2acfa891a13da00f79734704c4b8b4ef1a10b368a3c"
+dependencies = [
+ "crossbeam-channel",
+ "symlink",
+ "thiserror 2.0.18",
+ "time",
+ "tracing-subscriber",
 ]
 
 [[package]]

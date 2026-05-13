@@ -118,3 +118,51 @@ export async function getSetting(key: string): Promise<string | null> {
 export async function setSetting(key: string, value: string): Promise<void> {
   return invoke('set_setting', { key, value });
 }
+
+// ─── Backup / Restore ──────────────────────────────────────────────────────
+
+export async function exportBackup(path: string, passphrase: string): Promise<number> {
+  return invoke('export_backup', { path, passphrase });
+}
+
+export async function importBackup(path: string, passphrase: string): Promise<void> {
+  return invoke('import_backup', { path, passphrase });
+}
+
+// ─── Folders ───────────────────────────────────────────────────────────────
+
+export interface FolderDto {
+  id: number;
+  name: string;
+  icon: string | null;
+  sort_order: number;
+  created_at: number;
+}
+
+export async function listFolders(): Promise<FolderDto[]> {
+  return invoke('list_folders');
+}
+
+export async function createFolder(name: string, icon: string | null = null): Promise<number> {
+  return invoke('create_folder', { name, icon });
+}
+
+export async function renameFolder(folder_id: number, new_name: string): Promise<void> {
+  return invoke('rename_folder', { folderId: folder_id, newName: new_name });
+}
+
+export async function deleteFolder(folder_id: number): Promise<boolean> {
+  return invoke('delete_folder', { folderId: folder_id });
+}
+
+export async function addContactToFolder(folder_id: number, contact_ghost_id: string): Promise<void> {
+  return invoke('add_contact_to_folder', { folderId: folder_id, contactGhostId: contact_ghost_id });
+}
+
+export async function removeContactFromFolder(folder_id: number, contact_ghost_id: string): Promise<void> {
+  return invoke('remove_contact_from_folder', { folderId: folder_id, contactGhostId: contact_ghost_id });
+}
+
+export async function contactsForFolder(folder_id: number): Promise<string[]> {
+  return invoke('contacts_for_folder', { folderId: folder_id });
+}

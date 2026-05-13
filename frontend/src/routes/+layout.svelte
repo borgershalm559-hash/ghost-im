@@ -24,6 +24,8 @@
 
   let route = $derived(page.url.pathname);
   let isOnboarding = $derived(route === '/onboarding');
+  let isSettings = $derived(route === '/settings');
+  let useShell = $derived(!isOnboarding && !isSettings);
 
   async function boot() {
     try {
@@ -84,7 +86,7 @@
     <div class="boot">Загрузка…</div>
   {:else if bootError}
     <div class="boot err">{bootError}</div>
-  {:else if isOnboarding}
+  {:else if !useShell}
     {@render children()}
   {:else}
     <ShellLayout>
