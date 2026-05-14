@@ -21,12 +21,15 @@ pub async fn get_diagnostics(state: State<'_, AppState>) -> CommandResult<Diagno
     let client = state.require_client().await?;
     let ghost_id = client.ghost_id();
     let fingerprint = ghost_core::Fingerprint::of(&ghost_id).to_string();
+    // Use live_local_addrs so we pick up addresses libp2p added after open
+    // (NAT-mapped external addr from identify, AutoNAT confirmed addresses).
+    let live = client.live_local_addrs().await;
     Ok(DiagnosticsDto {
         app_version: env!("CARGO_PKG_VERSION").to_string(),
         ghost_id: ghost_id.to_string(),
         fingerprint,
         peer_id: client.local_peer_id().to_string(),
-        local_addrs: client.local_addrs().iter().map(|a| a.to_string()).collect(),
+        local_addrs: live.iter().map(|a| a.to_string()).collect(),
         bootstrap_count: 4, // hardcoded in ghost-network
     })
 }

@@ -37,7 +37,11 @@ pub struct ClientConfig {
 impl Default for ClientConfig {
     fn default() -> Self {
         Self {
-            listen_addr: "/ip4/127.0.0.1/udp/0/quic-v1"
+            // Listen on ALL interfaces (0.0.0.0) so peers on the same LAN
+            // can dial us, and so our external (NAT-mapped) address becomes
+            // routable. Listening on 127.0.0.1 only makes the node reachable
+            // from the same machine — which is useless for a P2P messenger.
+            listen_addr: "/ip4/0.0.0.0/udp/0/quic-v1"
                 .parse()
                 .expect("valid multiaddr"),
             passphrase: None,
@@ -117,11 +121,7 @@ impl Client {
         };
 
         spawn_retention_scrubber(client.db.clone());
-        spawn_address_publisher(
-            client.network.clone(),
-            client.ik.clone(),
-            client.local_addrs.clone(),
-        );
+        spawn_address_publisher(client.network.clone(), client.ik.clone());
         client.ensure_keypackages().await?;
         Ok(client)
     }
@@ -192,6 +192,15 @@ impl Client {
 
     pub fn local_addrs(&self) -> &[Multiaddr] {
         &self.local_addrs
+    }
+
+    /// Query the running Network for the *current* listen addresses. Picks up
+    /// addresses libp2p added after Client::open returned (e.g. NAT-mapped
+    /// external addresses from identify/AutoNAT). Filters loopback.
+    pub async fn live_local_addrs(&self) -> Vec<Multiaddr> {
+        let mut addrs = self.network.lock().await.local_addrs().await;
+        addrs.retain(|a| !is_loopback_multiaddr(a));
+        addrs
     }
 
     pub fn ghost_id(&self) -> ghost_core::GhostId {
@@ -693,35 +702,50 @@ fn map_dial_error(e: crate::error::ClientError) -> crate::error::ClientError {
 }
 
 /// Publish our own AddressRecord to the DHT every 5 minutes (per spec §5).
-/// First publish runs immediately after addresses are bound.
-fn spawn_address_publisher(
-    network: Arc<Mutex<Network>>,
-    ik: Arc<IdentityKey>,
-    local_addrs: Vec<Multiaddr>,
-) {
+/// Each tick re-queries the network for the current listen addresses (libp2p
+/// adds observed/external addresses after startup via identify + AutoNAT, so
+/// a startup snapshot would be stale).
+///
+/// First publish runs after a short delay (~10s) to let identify exchange
+/// with the bootstrap nodes settle, so observed_addr arrives before the
+/// initial DHT publish.
+fn spawn_address_publisher(network: Arc<Mutex<Network>>, ik: Arc<IdentityKey>) {
     tokio::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_secs(10)).await;
         let mut tick = tokio::time::interval(std::time::Duration::from_secs(300));
         loop {
-            tick.tick().await;
             let now = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .map(|d| d.as_secs())
                 .unwrap_or(0);
-            let endpoints: Vec<String> = local_addrs.iter().map(|a| a.to_string()).collect();
+            // Re-query so we pick up addresses libp2p discovered after startup
+            // (NAT-mapped external addr from identify, observed_addr, etc).
+            let live_addrs = network.lock().await.local_addrs().await;
+            let endpoints: Vec<String> = live_addrs
+                .iter()
+                .filter(|a| !is_loopback_multiaddr(a))
+                .map(|a| a.to_string())
+                .collect();
             if endpoints.is_empty() {
-                continue;
-            }
-            let record = match ghost_network::AddressRecord::new(&ik, endpoints, now, 600) {
-                Ok(r) => r,
-                Err(e) => {
-                    tracing::warn!(target: "ghost-client", "address record sign failed: {e}");
-                    continue;
+                tracing::debug!(target: "ghost-client", "no non-loopback addresses to publish yet");
+            } else {
+                let record = match ghost_network::AddressRecord::new(&ik, endpoints, now, 600) {
+                    Ok(r) => r,
+                    Err(e) => {
+                        tracing::warn!(target: "ghost-client", "address record sign failed: {e}");
+                        tick.tick().await;
+                        continue;
+                    }
+                };
+                let net = network.lock().await;
+                match net.put_address_record(record).await {
+                    Ok(()) => tracing::info!(target: "ghost-client", "published AddressRecord"),
+                    Err(e) => tracing::warn!(
+                        target: "ghost-client", "DHT put_address_record failed: {e}"
+                    ),
                 }
-            };
-            let net = network.lock().await;
-            if let Err(e) = net.put_address_record(record).await {
-                tracing::warn!(target: "ghost-client", "DHT put_address_record failed: {e}");
             }
+            tick.tick().await;
         }
     });
 }
@@ -878,18 +902,41 @@ fn bytes_to_array_32(b: &[u8]) -> [u8; 32] {
     *blake3::hash(b).as_bytes()
 }
 
+/// Wait for at least one listen address, then keep collecting for an additional
+/// settling window so libp2p can emit a NewListenAddr per interface (typical
+/// when listening on `/ip4/0.0.0.0/udp/0/...`).
 async fn wait_for_local_addrs(network: &Arc<Mutex<Network>>) -> Vec<Multiaddr> {
-    let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+    let initial_deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+    // Wait for the first address.
     loop {
         let addrs = network.lock().await.local_addrs().await;
         if !addrs.is_empty() {
-            return addrs;
+            break;
         }
-        if tokio::time::Instant::now() > deadline {
+        if tokio::time::Instant::now() > initial_deadline {
             return Vec::new();
         }
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
+    // Settle: collect any additional NewListenAddr events for 800ms.
+    tokio::time::sleep(Duration::from_millis(800)).await;
+    let mut addrs = network.lock().await.local_addrs().await;
+    // Filter loopback — it's never useful for a peer connection and clutters
+    // the Diagnostics page + invite payload.
+    addrs.retain(|a| !is_loopback_multiaddr(a));
+    addrs
+}
+
+fn is_loopback_multiaddr(addr: &Multiaddr) -> bool {
+    use libp2p::multiaddr::Protocol;
+    for proto in addr.iter() {
+        match proto {
+            Protocol::Ip4(ip) if ip.is_loopback() => return true,
+            Protocol::Ip6(ip) if ip.is_loopback() => return true,
+            _ => {}
+        }
+    }
+    false
 }
 
 #[cfg(test)]
