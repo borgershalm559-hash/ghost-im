@@ -96,7 +96,14 @@
 
 <div class="content">
   {#if booting}
-    <div class="boot">Загрузка…</div>
+    <div class="boot">
+      <div class="boot-dots">
+        <span></span>
+        <span></span>
+        <span></span>
+      </div>
+      <div class="boot-text">Загрузка…</div>
+    </div>
   {:else if aeadError}
     <RecoveryScreen
       errorText={aeadError}
@@ -131,6 +138,8 @@
     display: flex;
     align-items: center;
     justify-content: center;
+    flex-direction: column;
+    gap: 16px;
     flex: 1;
     color: var(--text-dim);
     font-size: 14px;
@@ -139,5 +148,39 @@
     color: var(--danger);
     padding: 20px;
     text-align: center;
+  }
+  .boot-dots {
+    display: flex;
+    gap: 6px;
+  }
+  .boot-dots span {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+    opacity: 0.4;
+    animation: dot-pulse 1.2s ease-in-out infinite;
+  }
+  .boot-dots span:nth-child(2) {
+    animation-delay: 0.15s;
+  }
+  .boot-dots span:nth-child(3) {
+    animation-delay: 0.3s;
+  }
+  .boot-text {
+    opacity: 0.7;
+    letter-spacing: 0.5px;
+  }
+  @keyframes dot-pulse {
+    0%,
+    80%,
+    100% {
+      opacity: 0.3;
+      transform: scale(0.8);
+    }
+    40% {
+      opacity: 1;
+      transform: scale(1.1);
+    }
   }
 </style>

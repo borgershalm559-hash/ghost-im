@@ -40,6 +40,7 @@
     gap: 10px;
     margin: 4px 0;
     padding: 0 24px;
+    animation: bubble-in 0.22s cubic-bezier(0.16, 1, 0.3, 1);
   }
   .row.mine {
     justify-content: flex-end;

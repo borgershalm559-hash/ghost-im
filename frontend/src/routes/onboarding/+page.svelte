@@ -127,6 +127,24 @@
     position: relative;
     z-index: 1;
     box-shadow: 0 24px 80px rgba(0, 0, 0, 0.4);
+    animation: scale-up 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .primary {
+    transition:
+      transform 0.12s ease,
+      box-shadow 0.18s ease,
+      filter 0.18s ease,
+      opacity 0.18s ease;
+  }
+  .primary:hover:not(:disabled) {
+    transform: translateY(-1px);
+    filter: brightness(1.08);
+  }
+  .primary:active:not(:disabled) {
+    transform: translateY(0);
+  }
+  input {
+    transition: border-color 0.15s ease;
   }
   .logo {
     text-align: center;

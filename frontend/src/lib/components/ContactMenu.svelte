@@ -111,6 +111,8 @@
     min-width: 220px;
     box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
     color: var(--text);
+    animation: scale-up 0.14s cubic-bezier(0.16, 1, 0.3, 1);
+    transform-origin: top left;
   }
   .menu button {
     width: 100%;
@@ -122,6 +124,7 @@
     border-radius: 6px;
     font-size: 13px;
     cursor: pointer;
+    transition: background-color 0.12s;
   }
   .menu button:hover {
     background: var(--hover);

@@ -102,6 +102,7 @@
     width: 280px;
     height: 280px;
     margin-bottom: 32px;
+    animation: ghost-float 5s ease-in-out infinite;
   }
   .orbit {
     position: absolute;
@@ -109,6 +110,31 @@
     top: 50%;
     border-radius: 50%;
     border: 1px dashed var(--border);
+    animation: orbit-pulse 4s ease-in-out infinite;
+  }
+  .orbit:nth-child(1) {
+    animation-delay: 0s;
+  }
+  .orbit:nth-child(2) {
+    animation-delay: -1.3s;
+  }
+  .orbit:nth-child(3) {
+    animation-delay: -2.6s;
+  }
+  .title,
+  .sub,
+  .pills,
+  .cta {
+    animation: slide-up 0.4s 0.1s ease-out backwards;
+  }
+  .sub {
+    animation-delay: 0.18s;
+  }
+  .pills {
+    animation-delay: 0.26s;
+  }
+  .cta {
+    animation-delay: 0.34s;
   }
   .title {
     font-size: 22px;
@@ -163,6 +189,18 @@
     cursor: pointer;
     font-weight: 600;
     font-size: 13px;
+    transition:
+      transform 0.12s ease,
+      box-shadow 0.18s ease,
+      filter 0.18s ease;
+  }
+  .primary:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px var(--accent-soft);
+    filter: brightness(1.05);
+  }
+  .primary:active {
+    transform: translateY(0);
   }
   .ghost-btn {
     padding: 10px 18px;

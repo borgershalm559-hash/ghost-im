@@ -92,6 +92,16 @@
     align-items: center;
     gap: 4px;
     font: inherit;
+    transition:
+      background-color 0.18s ease,
+      color 0.18s ease,
+      transform 0.08s ease;
+  }
+  .cell:hover:not(.decorative) {
+    background: var(--hover);
+  }
+  .cell:active:not(.decorative) {
+    transform: scale(0.96);
   }
   .cell.active {
     background: var(--accent-dim);
@@ -100,6 +110,9 @@
   .cell.decorative {
     cursor: default;
     opacity: 0.5;
+  }
+  .cell.decorative:hover {
+    opacity: 0.7;
   }
   .ic {
     display: flex;

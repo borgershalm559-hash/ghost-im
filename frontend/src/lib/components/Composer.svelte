@@ -110,6 +110,19 @@
     align-items: center;
     justify-content: center;
     box-shadow: 0 4px 16px var(--accent-soft);
+    transition:
+      transform 0.12s ease,
+      box-shadow 0.18s ease,
+      filter 0.18s ease,
+      opacity 0.18s ease;
+  }
+  .send:hover:not(:disabled) {
+    transform: scale(1.05);
+    box-shadow: 0 6px 20px var(--accent-soft);
+    filter: brightness(1.1);
+  }
+  .send:active:not(:disabled) {
+    transform: scale(0.95);
   }
   .send:disabled {
     opacity: 0.5;

@@ -67,6 +67,7 @@
 
 {#if visible && update}
   <div
+    class="update-banner"
     style="position: sticky; top: 0; left: 0; right: 0; background: #3a2e15; color: #f5d486; padding: 0.6rem 1rem; display: flex; align-items: center; gap: 1rem; border-bottom: 1px solid #5a4625; font-size: 0.9rem; z-index: 100;"
     role="status"
     aria-live="polite"
@@ -101,3 +102,20 @@
     {/if}
   </div>
 {/if}
+
+<style>
+  .update-banner {
+    animation: slide-down 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .update-banner button {
+    transition:
+      transform 0.1s ease,
+      filter 0.15s ease;
+  }
+  .update-banner button:hover {
+    filter: brightness(1.06);
+  }
+  .update-banner button:active {
+    transform: scale(0.97);
+  }
+</style>

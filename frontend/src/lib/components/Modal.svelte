@@ -49,6 +49,7 @@
     justify-content: center;
     z-index: 1000;
     backdrop-filter: blur(4px);
+    animation: fade-in 0.15s ease-out;
   }
   .pane {
     background: var(--surface);
@@ -58,6 +59,7 @@
     max-height: 80vh;
     overflow: auto;
     box-shadow: 0 24px 80px rgba(0, 0, 0, 0.5);
+    animation: scale-up 0.18s cubic-bezier(0.16, 1, 0.3, 1);
   }
   header {
     display: flex;

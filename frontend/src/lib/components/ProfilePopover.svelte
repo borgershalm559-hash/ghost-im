@@ -82,6 +82,8 @@
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
     z-index: 100;
     color: var(--text);
+    animation: slide-up 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+    transform-origin: bottom left;
   }
   .row {
     display: flex;

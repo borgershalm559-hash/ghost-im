@@ -93,12 +93,21 @@
     font: inherit;
     width: calc(100% - 16px);
     position: relative;
+    transition:
+      background-color 0.15s ease,
+      transform 0.08s ease;
   }
   .row:hover {
     background: var(--hover);
   }
+  .row:active {
+    transform: scale(0.99);
+  }
   .row.selected {
     background: var(--selected);
+  }
+  .bar {
+    animation: slide-up 0.2s ease-out;
   }
   .bar {
     position: absolute;
