@@ -55,10 +55,10 @@ fn main() {
             let app_handle = app.handle().clone();
             app.manage(InboxBridgeHandle(app_handle.clone()));
 
-            // Open DevTools in release builds too — explicit opt-in via env var
-            // so a normal user doesn't see the panel, but devs can pop it open.
-            // Set GHOST_DEVTOOLS=1 to enable.
-            #[cfg(any(debug_assertions, not(debug_assertions)))]
+            // DevTools — opt-in via GHOST_DEVTOOLS=1. The `devtools` Cargo
+            // feature is enabled for tauri in Cargo.toml, so this API exists
+            // in both debug + release builds. A normal user without the env
+            // var sees no DevTools panel.
             if std::env::var("GHOST_DEVTOOLS").is_ok() {
                 if let Some(window) = app_handle.get_webview_window("main") {
                     window.open_devtools();

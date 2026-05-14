@@ -15,11 +15,13 @@
   import { store } from '$lib/state.svelte';
   import UpdateBanner from '$lib/components/UpdateBanner.svelte';
   import ShellLayout from '$lib/components/ShellLayout.svelte';
+  import RecoveryScreen from '$lib/components/RecoveryScreen.svelte';
 
   let { children } = $props();
 
   let booting = $state(true);
   let bootError = $state<string | null>(null);
+  let aeadError = $state<string | null>(null);
   let unlistenFn: (() => void) | null = null;
 
   let route = $derived(page.url.pathname);
@@ -38,7 +40,18 @@
         if (!isOnboarding) await goto('/onboarding');
         return;
       }
-      const info = status.client_open ? await clientInfo() : await openClient(null);
+      let info;
+      try {
+        info = status.client_open ? await clientInfo() : await openClient(null);
+      } catch (e) {
+        const msg = String(e);
+        if (/AEAD|decryption|wrong key/i.test(msg)) {
+          aeadError = msg;
+          booting = false;
+          return;
+        }
+        throw e;
+      }
       store.setInfo(info);
 
       // Ghost mode (settings need open client).
@@ -84,6 +97,15 @@
 <div class="content">
   {#if booting}
     <div class="boot">Загрузка…</div>
+  {:else if aeadError}
+    <RecoveryScreen
+      errorText={aeadError}
+      onRecovered={() => {
+        aeadError = null;
+        booting = true;
+        void boot();
+      }}
+    />
   {:else if bootError}
     <div class="boot err">{bootError}</div>
   {:else if !useShell}

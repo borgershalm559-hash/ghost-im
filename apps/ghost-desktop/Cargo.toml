@@ -17,7 +17,7 @@ tauri-build = { workspace = true }
 ghost-app = { path = "../../crates/ghost-app" }
 
 serde_json = "1"
-tauri = { workspace = true, features = [] }
+tauri = { workspace = true, features = ["devtools"] }
 tauri-plugin-updater = { version = "2", features = ["native-tls"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
