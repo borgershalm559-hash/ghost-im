@@ -117,6 +117,11 @@ impl Client {
         };
 
         spawn_retention_scrubber(client.db.clone());
+        spawn_address_publisher(
+            client.network.clone(),
+            client.ik.clone(),
+            client.local_addrs.clone(),
+        );
         client.ensure_keypackages().await?;
         Ok(client)
     }
@@ -264,18 +269,31 @@ impl Client {
             .unwrap_or(0);
         invite.verify(now)?;
 
+        // Reject adding self — common UX confusion in MVP-1 where a user
+        // pastes their own invite into the Add-contact field.
+        if invite.ghost_id == self.identity.identity_key.ghost_id() {
+            return Err(crate::error::ClientError::Invalid(
+                "cannot add yourself as a contact".into(),
+            ));
+        }
+
         let peer_id = peer_id_from_ghost_id(&invite.ghost_id)?;
-        let address = invite
+        let invite_addr: Option<Multiaddr> = invite
             .addresses
             .first()
-            .ok_or_else(|| crate::error::ClientError::Invalid("invite has no addresses".into()))?
-            .parse::<Multiaddr>()
-            .map_err(|e| crate::error::ClientError::Invalid(format!("address: {e}")))?;
+            .and_then(|a| a.parse::<Multiaddr>().ok());
 
+        // Try direct dial via the invite-embedded address first. If that fails
+        // (peer moved networks, NAT changed, address stale), fall back to the
+        // DHT — the peer may have re-published a fresh `AddressRecord`.
         let server_client = ServerClient::new(self.network.clone());
+        let address = self
+            .resolve_peer_address(&invite.ghost_id, peer_id, invite_addr)
+            .await?;
         let kp_bytes = server_client
             .get_key_package(peer_id, Some(address.clone()))
-            .await?;
+            .await
+            .map_err(|e| map_dial_error(e.into()))?;
 
         // Validate KeyPackage and create MLS group + Welcome.
         let provider = new_provider();
@@ -609,6 +627,105 @@ impl Client {
 /// the process lifetime (the underlying DB Arc keeps it alive as long as the
 /// Client exists; when the Client drops, the DB Arc count drops and the next
 /// purge call errors, which simply ends the task).
+/// Resolve a peer's reachable Multiaddr. Tries (in order):
+///   1. The address embedded in the invite (if provided).
+///   2. The most recent `AddressRecord` published in the DHT.
+///
+/// Returns an error if neither path yields a probe-able address.
+impl Client {
+    async fn resolve_peer_address(
+        &self,
+        ghost_id: &ghost_core::GhostId,
+        peer_id: libp2p::PeerId,
+        invite_addr: Option<Multiaddr>,
+    ) -> Result<Multiaddr> {
+        // Path 1: invite address. We optimistically use it without probing —
+        // request-response queues the request and surfaces a dial failure if
+        // it's stale, which we map to a friendly error downstream.
+        if let Some(addr) = invite_addr.clone() {
+            return Ok(addr);
+        }
+        // Path 2: DHT lookup.
+        let net = self.network.lock().await;
+        let record = net
+            .get_address_record(*ghost_id)
+            .await
+            .map_err(crate::error::ClientError::Network)?;
+        drop(net);
+        if let Some(rec) = record {
+            // Verify signature is intact + check expiry.
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs())
+                .unwrap_or(0);
+            if rec.expires_at > now {
+                if let Some(addr_str) = rec.endpoints.first() {
+                    if let Ok(addr) = addr_str.parse::<Multiaddr>() {
+                        tracing::info!(
+                            target: "ghost-client",
+                            %peer_id, "resolved peer address via DHT",
+                        );
+                        return Ok(addr);
+                    }
+                }
+            }
+        }
+        Err(crate::error::ClientError::PeerUnreachable(
+            "peer has no reachable address (not in DHT, no invite endpoint)".into(),
+        ))
+    }
+}
+
+/// Translate libp2p dial failures into a user-friendly error variant.
+fn map_dial_error(e: crate::error::ClientError) -> crate::error::ClientError {
+    let msg = e.to_string();
+    if msg.contains("outbound failure")
+        || msg.contains("Failed to dial")
+        || msg.contains("DialFailure")
+        || msg.contains("Timeout")
+    {
+        crate::error::ClientError::PeerUnreachable(
+            "не удалось дозвониться до контакта — собеседник не запущен или не в одной сети".into(),
+        )
+    } else {
+        e
+    }
+}
+
+/// Publish our own AddressRecord to the DHT every 5 minutes (per spec §5).
+/// First publish runs immediately after addresses are bound.
+fn spawn_address_publisher(
+    network: Arc<Mutex<Network>>,
+    ik: Arc<IdentityKey>,
+    local_addrs: Vec<Multiaddr>,
+) {
+    tokio::spawn(async move {
+        let mut tick = tokio::time::interval(std::time::Duration::from_secs(300));
+        loop {
+            tick.tick().await;
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs())
+                .unwrap_or(0);
+            let endpoints: Vec<String> = local_addrs.iter().map(|a| a.to_string()).collect();
+            if endpoints.is_empty() {
+                continue;
+            }
+            let record = match ghost_network::AddressRecord::new(&ik, endpoints, now, 600) {
+                Ok(r) => r,
+                Err(e) => {
+                    tracing::warn!(target: "ghost-client", "address record sign failed: {e}");
+                    continue;
+                }
+            };
+            let net = network.lock().await;
+            if let Err(e) = net.put_address_record(record).await {
+                tracing::warn!(target: "ghost-client", "DHT put_address_record failed: {e}");
+            }
+        }
+    });
+}
+
 fn spawn_retention_scrubber(db: Arc<Database>) {
     tokio::spawn(async move {
         let mut tick = tokio::time::interval(std::time::Duration::from_secs(60));

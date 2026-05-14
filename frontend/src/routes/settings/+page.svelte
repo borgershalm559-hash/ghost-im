@@ -2,13 +2,48 @@
   import { goto } from '$app/navigation';
   import { store } from '$lib/state.svelte';
   import { persistTheme } from '$lib/theme';
-  import { setSetting, exportBackup, importBackup } from '$lib/tauri';
+  import { setSetting, exportBackup, importBackup, getDiagnostics } from '$lib/tauri';
+  import type { DiagnosticsDto } from '$lib/tauri';
   import Icon from '$lib/components/Icon.svelte';
   import IdentityModal from '$lib/components/IdentityModal.svelte';
   import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog';
 
-  type Section = 'profile' | 'appearance' | 'security' | 'about';
+  type Section = 'profile' | 'appearance' | 'security' | 'diagnostics' | 'about';
   let section = $state<Section>('profile');
+
+  let diagnostics = $state<DiagnosticsDto | null>(null);
+  let diagBusy = $state(false);
+  let diagError = $state<string | null>(null);
+
+  async function loadDiagnostics() {
+    diagBusy = true;
+    diagError = null;
+    try {
+      diagnostics = await getDiagnostics();
+    } catch (e) {
+      diagError = String(e);
+    } finally {
+      diagBusy = false;
+    }
+  }
+
+  $effect(() => {
+    if (section === 'diagnostics' && diagnostics === null && !diagBusy) {
+      void loadDiagnostics();
+    }
+  });
+
+  async function copyDiagnosticsToClipboard() {
+    if (!diagnostics) return;
+    const text = `Ghost ${diagnostics.app_version}
+Ghost ID: ${diagnostics.ghost_id}
+Fingerprint: ${diagnostics.fingerprint}
+Peer ID: ${diagnostics.peer_id}
+Local addresses:
+${diagnostics.local_addrs.map((a) => '  - ' + a).join('\n')}
+Bootstrap nodes: ${diagnostics.bootstrap_count}`;
+    await navigator.clipboard.writeText(text);
+  }
 
   let identityOpen = $state(false);
 
@@ -107,6 +142,9 @@
       </button>
       <button class:active={section === 'security'} onclick={() => (section = 'security')}>
         Безопасность
+      </button>
+      <button class:active={section === 'diagnostics'} onclick={() => (section = 'diagnostics')}>
+        Диагностика
       </button>
       <button class:active={section === 'about'} onclick={() => (section = 'about')}>
         О программе
@@ -211,6 +249,60 @@
             {/if}
           </div>
         </div>
+
+      {:else if section === 'diagnostics'}
+        <h2>Диагностика</h2>
+        <p class="row-sub" style="margin: 0 0 14px 0;">
+          Техническая информация о вашем подключении. Полезно для багрепортов и
+          отладки сетевых проблем.
+        </p>
+
+        {#if diagBusy}
+          <div class="card">
+            <div class="row">Загрузка…</div>
+          </div>
+        {:else if diagError}
+          <div class="card">
+            <p class="err">{diagError}</p>
+            <button class="primary" onclick={loadDiagnostics}>Повторить</button>
+          </div>
+        {:else if diagnostics}
+          <div class="card">
+            <div class="diag-row">
+              <div class="diag-label">Версия приложения</div>
+              <div class="diag-value">{diagnostics.app_version}</div>
+            </div>
+            <div class="diag-row">
+              <div class="diag-label">Peer ID (libp2p)</div>
+              <div class="diag-value mono">{diagnostics.peer_id}</div>
+            </div>
+            <div class="diag-row">
+              <div class="diag-label">Bootstrap-нод подключено</div>
+              <div class="diag-value">{diagnostics.bootstrap_count}</div>
+            </div>
+            <div class="diag-row col">
+              <div class="diag-label">Локальные адреса (libp2p слушает)</div>
+              <div class="diag-addrs">
+                {#each diagnostics.local_addrs as addr}
+                  <code>{addr}</code>
+                {/each}
+                {#if diagnostics.local_addrs.length === 0}
+                  <span class="dim">нет</span>
+                {/if}
+              </div>
+            </div>
+          </div>
+          <button class="primary" style="margin-top: 8px;" onclick={copyDiagnosticsToClipboard}>
+            Скопировать в буфер
+          </button>
+          <button
+            class="secondary"
+            style="margin-top: 8px; margin-left: 8px;"
+            onclick={loadDiagnostics}
+          >
+            Обновить
+          </button>
+        {/if}
 
       {:else if section === 'about'}
         <h2>О программе</h2>
@@ -503,6 +595,69 @@
     color: var(--text-muted);
     font-size: 11px;
     padding: 12px 24px 16px;
+  }
+  .secondary {
+    padding: 8px 14px;
+    background: transparent;
+    color: var(--text);
+    border: 0.5px solid var(--border);
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 500;
+    font-size: 13px;
+  }
+  .secondary:hover {
+    background: var(--hover);
+  }
+  .diag-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 0;
+    border-bottom: 0.5px solid var(--border);
+    gap: 16px;
+  }
+  .diag-row:last-child {
+    border-bottom: none;
+  }
+  .diag-row.col {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+  .diag-label {
+    font-size: 12px;
+    color: var(--text-dim);
+    flex-shrink: 0;
+  }
+  .diag-value {
+    font-size: 13px;
+    color: var(--text);
+    text-align: right;
+    word-break: break-all;
+  }
+  .diag-value.mono {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+  }
+  .diag-addrs {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .diag-addrs code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    background: var(--bg);
+    border: 0.5px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 10px;
+    color: var(--text);
+    word-break: break-all;
+  }
+  .dim {
+    color: var(--text-muted);
+    font-size: 12px;
   }
 
   /* Narrow viewport — nav collapses to horizontal tabs */

@@ -13,10 +13,33 @@ use ghost_core::GhostId;
 use ghost_identity::IdentityKey;
 use libp2p::{
     core::{transport::ListenerId, ConnectedPoint},
-    kad, request_response,
+    identify, kad, request_response,
     swarm::SwarmEvent,
     Multiaddr, PeerId, Swarm, SwarmBuilder,
 };
+
+/// Public IPFS Kademlia bootstrap nodes. Ghost reuses these — libp2p Kademlia
+/// is a shared global protocol space, and using the IPFS bootstrap gives us
+/// an existing network of DHT-server nodes for AddressRecord storage and
+/// peer lookup. Users can add their own bootstrap multiaddrs at runtime.
+const BOOTSTRAP_NODES: &[(&str, &str)] = &[
+    (
+        "QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN",
+        "/dnsaddr/bootstrap.libp2p.io",
+    ),
+    (
+        "QmQCU2EcMqAqQPR2i9bChDtGNJchTbq5TbXJJ16u19uLTa",
+        "/dnsaddr/bootstrap.libp2p.io",
+    ),
+    (
+        "QmbLHAnMoJPWSCR5Zhtx6BHJX9KiKNN6tpvbUcqanj75Nb",
+        "/dnsaddr/bootstrap.libp2p.io",
+    ),
+    (
+        "QmcZf59bWwK5XFi76CZX8cbJ4BhTzzA3gU1ZjYZcYW3dwt",
+        "/dnsaddr/bootstrap.libp2p.io",
+    ),
+];
 use std::collections::HashMap;
 use std::time::Duration;
 use tokio::sync::{mpsc, oneshot};
@@ -122,7 +145,7 @@ impl Network {
         // Clone so the keypair can be moved into SwarmBuilder by value while
         // we retain a copy for GhostBehaviour::new.
         let kp_clone = kp.clone();
-        let swarm = SwarmBuilder::with_existing_identity(kp)
+        let mut swarm = SwarmBuilder::with_existing_identity(kp)
             .with_tokio()
             .with_quic()
             .with_behaviour(|_kp_inner| {
@@ -134,6 +157,20 @@ impl Network {
             .map_err(|e| NetworkError::Transport(format!("build behaviour: {e}")))?
             .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(60)))
             .build();
+
+        // Bootstrap: add public DHT seed nodes so we can publish/lookup records
+        // and find peers we've never directly connected to. AutoNAT will also
+        // use these nodes to probe our external dialability.
+        for (peer_str, addr_str) in BOOTSTRAP_NODES {
+            if let (Ok(peer), Ok(addr)) = (peer_str.parse::<PeerId>(), addr_str.parse::<Multiaddr>())
+            {
+                swarm.behaviour_mut().kad.add_address(&peer, addr.clone());
+                swarm.behaviour_mut().autonat.add_server(peer, Some(addr));
+            }
+        }
+        // Trigger a Kademlia bootstrap query so the swarm starts populating
+        // its routing table. Failure here is non-fatal — peers will retry later.
+        let _ = swarm.behaviour_mut().kad.bootstrap();
 
         let (cmd_tx, cmd_rx) = mpsc::channel::<Command>(64);
         let (request_tx, request_rx) = mpsc::channel::<InboundRequest>(64);
@@ -521,6 +558,37 @@ async fn handle_swarm_event(
                 // informational; ignore them for now.
                 _ => {}
             }
+        }
+
+        // ----------------------------------------------------------------
+        // identify: a peer told us its observed address for us — feed it to
+        // AutoNAT and as a swarm external-address candidate so future dials
+        // by other peers go to the right place.
+        // ----------------------------------------------------------------
+        SwarmEvent::Behaviour(GhostBehaviourEvent::Identify(identify::Event::Received {
+            peer_id,
+            info,
+            ..
+        })) => {
+            // Add the peer's listen addresses to Kademlia so we can route
+            // to them. This is how the DHT routing table grows.
+            for addr in &info.listen_addrs {
+                swarm
+                    .behaviour_mut()
+                    .kad
+                    .add_address(&peer_id, addr.clone());
+            }
+            // If they told us how they see us, treat it as a candidate
+            // external address — useful behind NAT.
+            swarm.add_external_address(info.observed_addr.clone());
+        }
+
+        // ----------------------------------------------------------------
+        // AutoNAT: confirmed NAT status / external address change.
+        // ----------------------------------------------------------------
+        SwarmEvent::Behaviour(GhostBehaviourEvent::Autonat(_event)) => {
+            // No special handling yet — AutoNAT updates the swarm's
+            // external-address bookkeeping internally.
         }
 
         // All other swarm events (dialling, connection closed, …) are

@@ -1957,7 +1957,7 @@ dependencies = [
 
 [[package]]
 name = "ghost-app"
-version = "0.0.6"
+version = "0.0.7"
 dependencies = [
  "ghost-client",
  "ghost-core",
@@ -1975,7 +1975,7 @@ dependencies = [
 
 [[package]]
 name = "ghost-client"
-version = "0.0.6"
+version = "0.0.7"
 dependencies = [
  "bech32",
  "blake3",
@@ -2007,7 +2007,7 @@ dependencies = [
 
 [[package]]
 name = "ghost-core"
-version = "0.0.6"
+version = "0.0.7"
 dependencies = [
  "bech32",
  "blake3",
@@ -2020,7 +2020,7 @@ dependencies = [
 
 [[package]]
 name = "ghost-desktop"
-version = "0.0.6"
+version = "0.0.7"
 dependencies = [
  "directories",
  "ghost-app",
@@ -2038,7 +2038,7 @@ dependencies = [
 
 [[package]]
 name = "ghost-identity"
-version = "0.0.6"
+version = "0.0.7"
 dependencies = [
  "argon2",
  "base64 0.22.1",
@@ -2064,7 +2064,7 @@ dependencies = [
 
 [[package]]
 name = "ghost-identity-cli"
-version = "0.0.6"
+version = "0.0.7"
 dependencies = [
  "anyhow",
  "clap",
@@ -2074,7 +2074,7 @@ dependencies = [
 
 [[package]]
 name = "ghost-network"
-version = "0.0.6"
+version = "0.0.7"
 dependencies = [
  "async-trait",
  "blake3",
@@ -2095,7 +2095,7 @@ dependencies = [
 
 [[package]]
 name = "ghost-protocol"
-version = "0.0.6"
+version = "0.0.7"
 dependencies = [
  "blake3",
  "chacha20poly1305",
@@ -2122,7 +2122,7 @@ dependencies = [
 
 [[package]]
 name = "ghost-server"
-version = "0.0.6"
+version = "0.0.7"
 dependencies = [
  "blake3",
  "ciborium",
@@ -2142,7 +2142,7 @@ dependencies = [
 
 [[package]]
 name = "ghost-storage"
-version = "0.0.6"
+version = "0.0.7"
 dependencies = [
  "blake3",
  "ghost-core",
@@ -3509,6 +3509,7 @@ dependencies = [
  "futures-timer",
  "getrandom 0.2.17",
  "libp2p-allow-block-list",
+ "libp2p-autonat",
  "libp2p-connection-limits",
  "libp2p-core",
  "libp2p-dns",
@@ -3540,6 +3541,31 @@ dependencies = [
  "libp2p-core",
  "libp2p-identity",
  "libp2p-swarm",
+]
+
+[[package]]
+name = "libp2p-autonat"
+version = "0.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fab5e25c49a7d48dac83d95d8f3bac0a290d8a5df717012f6e34ce9886396c0b"
+dependencies = [
+ "async-trait",
+ "asynchronous-codec",
+ "either",
+ "futures",
+ "futures-bounded",
+ "futures-timer",
+ "libp2p-core",
+ "libp2p-identity",
+ "libp2p-request-response",
+ "libp2p-swarm",
+ "quick-protobuf",
+ "quick-protobuf-codec",
+ "rand 0.8.6",
+ "rand_core 0.6.4",
+ "thiserror 2.0.18",
+ "tracing",
+ "web-time",
 ]
 
 [[package]]

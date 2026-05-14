@@ -2,6 +2,7 @@
 
 pub mod backup;
 pub mod contact_actions;
+pub mod diagnostics;
 pub mod folders;
 pub mod identity;
 pub mod lifecycle;

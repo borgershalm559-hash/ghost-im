@@ -38,6 +38,11 @@ pub enum ClientError {
     #[error("invalid input: {0}")]
     Invalid(String),
 
+    /// Friendly variant for libp2p dial failures — kept distinct from
+    /// generic `Network(...)` so the UI can show a non-technical message.
+    #[error("Не удалось соединиться: {0}")]
+    PeerUnreachable(String),
+
     #[error("internal: {0}")]
     Internal(String),
 }

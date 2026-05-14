@@ -28,7 +28,21 @@
       store.setContacts(cs);
       setTimeout(() => onClose(), 1000);
     } catch (e) {
-      errorMsg = String(e);
+      const raw = String(e);
+      if (/cannot add yourself/i.test(raw)) {
+        errorMsg = 'Нельзя добавить себя как контакт — это ваш собственный инвайт.';
+      } else if (
+        /Не удалось соединиться|PeerUnreachable|outbound failure|Failed to dial|Timeout/i.test(raw)
+      ) {
+        errorMsg =
+          'Не удалось дозвониться до собеседника. Убедитесь, что у него запущен Ghost и вы в одной сети либо у него публичный IP. В MVP-1 нужно прямое соединение или общий DHT-bootstrap.';
+      } else if (/invite expired/i.test(raw)) {
+        errorMsg = 'Инвайт просрочен. Попросите собеседника создать новый.';
+      } else if (/invite signature invalid|invite parse/i.test(raw)) {
+        errorMsg = 'Инвайт повреждён или неправильно скопирован.';
+      } else {
+        errorMsg = raw;
+      }
     } finally {
       busy = false;
     }

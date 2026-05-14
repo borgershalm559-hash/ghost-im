@@ -3,7 +3,7 @@
 //! Combines: Kademlia (DHT), Identify (peer protocol info), RequestResponse (raw bytes).
 
 use libp2p::{
-    identify,
+    autonat, identify,
     identity::Keypair,
     kad::{self, store::MemoryStore},
     request_response::{self, ProtocolSupport},
@@ -93,15 +93,22 @@ pub struct GhostBehaviour {
     pub kad: kad::Behaviour<MemoryStore>,
     pub identify: identify::Behaviour,
     pub messages: request_response::Behaviour<GhostMessageCodec>,
+    pub autonat: autonat::Behaviour,
 }
 
 impl GhostBehaviour {
     /// Construct a fresh behaviour for the given local `PeerId`/`Keypair`.
+    ///
+    /// Kademlia starts in **server** mode so this node stores records for the
+    /// DHT (peer-discovery requires that real Ghost nodes participate in the
+    /// DHT, not just query it). AutoNAT runs as both client (asks peers if our
+    /// external address is reachable) and server (answers other peers' probes).
     pub fn new(local_peer_id: PeerId, kp: &Keypair) -> Self {
         let kad_store = MemoryStore::new(local_peer_id);
-        // kad::Config::default() uses the default Kademlia protocol name.
         let kad_config = kad::Config::default();
-        let kad = kad::Behaviour::with_config(local_peer_id, kad_store, kad_config);
+        let mut kad = kad::Behaviour::with_config(local_peer_id, kad_store, kad_config);
+        // Server mode: we will host records for other peers in addition to our own.
+        kad.set_mode(Some(kad::Mode::Server));
 
         // identify::Config::new takes (protocol_version: String, local_public_key: PublicKey).
         let identify_config = identify::Config::new("/ghost/v1".to_string(), kp.public());
@@ -113,10 +120,14 @@ impl GhostBehaviour {
             request_response::Config::default(),
         );
 
+        // AutoNAT defaults are conservative (60s probe interval, server enabled).
+        let autonat = autonat::Behaviour::new(local_peer_id, autonat::Config::default());
+
         Self {
             kad,
             identify,
             messages,
+            autonat,
         }
     }
 }

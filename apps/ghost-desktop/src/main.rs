@@ -6,8 +6,8 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use ghost_app::commands::{
-    backup, contact_actions, folders, identity, lifecycle, read, settings as settings_cmd,
-    updater, write,
+    backup, contact_actions, diagnostics, folders, identity, lifecycle, read,
+    settings as settings_cmd, updater, write,
 };
 use ghost_app::AppState;
 use tauri::Manager;
@@ -50,6 +50,7 @@ fn main() {
             folders::add_contact_to_folder,
             folders::remove_contact_from_folder,
             folders::contacts_for_folder,
+            diagnostics::get_diagnostics,
         ])
         .setup(|app| {
             let app_handle = app.handle().clone();

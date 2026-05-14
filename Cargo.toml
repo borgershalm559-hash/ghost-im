@@ -14,7 +14,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.0.6"
+version = "0.0.7"
 edition = "2021"
 rust-version = "1.87"
 license = "AGPL-3.0-only"
@@ -60,6 +60,7 @@ libp2p = { version = "0.56", features = [
     "request-response",
     "ed25519",
     "macros",
+    "autonat",
 ] }
 
 # Errors / utilities

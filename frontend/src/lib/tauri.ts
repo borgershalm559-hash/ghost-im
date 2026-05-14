@@ -166,3 +166,18 @@ export async function removeContactFromFolder(folder_id: number, contact_ghost_i
 export async function contactsForFolder(folder_id: number): Promise<string[]> {
   return invoke('contacts_for_folder', { folderId: folder_id });
 }
+
+// ─── Diagnostics ───────────────────────────────────────────────────────────
+
+export interface DiagnosticsDto {
+  app_version: string;
+  ghost_id: string;
+  fingerprint: string;
+  peer_id: string;
+  local_addrs: string[];
+  bootstrap_count: number;
+}
+
+export async function getDiagnostics(): Promise<DiagnosticsDto> {
+  return invoke('get_diagnostics');
+}
