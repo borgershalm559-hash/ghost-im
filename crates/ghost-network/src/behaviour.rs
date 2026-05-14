@@ -3,9 +3,10 @@
 //! Combines: Kademlia (DHT), Identify (peer protocol info), RequestResponse (raw bytes).
 
 use libp2p::{
-    autonat, identify,
+    autonat, dcutr, identify,
     identity::Keypair,
     kad::{self, store::MemoryStore},
+    ping, relay,
     request_response::{self, ProtocolSupport},
     swarm::NetworkBehaviour,
     PeerId, StreamProtocol,
@@ -94,6 +95,16 @@ pub struct GhostBehaviour {
     pub identify: identify::Behaviour,
     pub messages: request_response::Behaviour<GhostMessageCodec>,
     pub autonat: autonat::Behaviour,
+    /// Circuit relay v2 client: lets us reserve a relay slot so peers can
+    /// reach us via /p2p/<relay>/p2p-circuit when direct dial fails.
+    pub relay_client: relay::client::Behaviour,
+    /// DCUtR (Direct Connection Upgrade through Relay): once a relayed
+    /// connection exists, both peers perform synchronised UDP hole-punching
+    /// to upgrade to a direct connection.
+    pub dcutr: dcutr::Behaviour,
+    /// Ping keeps idle relay connections from being garbage-collected and
+    /// supplies a keep-alive over the request-response idle timer.
+    pub ping: ping::Behaviour,
 }
 
 impl GhostBehaviour {
@@ -103,7 +114,14 @@ impl GhostBehaviour {
     /// DHT (peer-discovery requires that real Ghost nodes participate in the
     /// DHT, not just query it). AutoNAT runs as both client (asks peers if our
     /// external address is reachable) and server (answers other peers' probes).
-    pub fn new(local_peer_id: PeerId, kp: &Keypair) -> Self {
+    /// Relay client + DCUtR enable cross-NAT communication: when direct dial
+    /// fails, peers fall back to a relayed connection and immediately try
+    /// to hole-punch via DCUtR for a direct path.
+    pub fn new(
+        local_peer_id: PeerId,
+        kp: &Keypair,
+        relay_client_behaviour: relay::client::Behaviour,
+    ) -> Self {
         let kad_store = MemoryStore::new(local_peer_id);
         let kad_config = kad::Config::default();
         let mut kad = kad::Behaviour::with_config(local_peer_id, kad_store, kad_config);
@@ -123,11 +141,17 @@ impl GhostBehaviour {
         // AutoNAT defaults are conservative (60s probe interval, server enabled).
         let autonat = autonat::Behaviour::new(local_peer_id, autonat::Config::default());
 
+        let dcutr = dcutr::Behaviour::new(local_peer_id);
+        let ping = ping::Behaviour::new(ping::Config::default());
+
         Self {
             kad,
             identify,
             messages,
             autonat,
+            relay_client: relay_client_behaviour,
+            dcutr,
+            ping,
         }
     }
 }
@@ -143,6 +167,14 @@ mod tests {
         let ik = IdentityKey::generate();
         let kp = libp2p_keypair_from_ik(&ik).unwrap();
         let peer_id = PeerId::from(kp.public());
-        let _b = GhostBehaviour::new(peer_id, &kp);
+        // Test doesn't exercise the relay client transport; instantiating
+        // its Behaviour requires a swarm-side handle from SwarmBuilder, so
+        // we construct a dummy one via the public API. The tests only
+        // verify that GhostBehaviour compiles + the types match.
+        let (_relay_transport, relay_behaviour) = relay::client::new(peer_id);
+        let _b = GhostBehaviour::new(peer_id, &kp, relay_behaviour);
+        // _relay_transport would be wired into SwarmBuilder via with_relay_client
+        // in real swarm setup; here we just discard it.
+        let _ = _relay_transport;
     }
 }

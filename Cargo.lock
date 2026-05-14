@@ -1957,7 +1957,7 @@ dependencies = [
 
 [[package]]
 name = "ghost-app"
-version = "0.0.8"
+version = "0.0.9"
 dependencies = [
  "ghost-client",
  "ghost-core",
@@ -1975,7 +1975,7 @@ dependencies = [
 
 [[package]]
 name = "ghost-client"
-version = "0.0.8"
+version = "0.0.9"
 dependencies = [
  "bech32",
  "blake3",
@@ -2007,7 +2007,7 @@ dependencies = [
 
 [[package]]
 name = "ghost-core"
-version = "0.0.8"
+version = "0.0.9"
 dependencies = [
  "bech32",
  "blake3",
@@ -2020,7 +2020,7 @@ dependencies = [
 
 [[package]]
 name = "ghost-desktop"
-version = "0.0.8"
+version = "0.0.9"
 dependencies = [
  "directories",
  "ghost-app",
@@ -2038,7 +2038,7 @@ dependencies = [
 
 [[package]]
 name = "ghost-identity"
-version = "0.0.8"
+version = "0.0.9"
 dependencies = [
  "argon2",
  "base64 0.22.1",
@@ -2064,7 +2064,7 @@ dependencies = [
 
 [[package]]
 name = "ghost-identity-cli"
-version = "0.0.8"
+version = "0.0.9"
 dependencies = [
  "anyhow",
  "clap",
@@ -2074,7 +2074,7 @@ dependencies = [
 
 [[package]]
 name = "ghost-network"
-version = "0.0.8"
+version = "0.0.9"
 dependencies = [
  "async-trait",
  "blake3",
@@ -2091,11 +2091,12 @@ dependencies = [
  "tempfile",
  "thiserror 1.0.69",
  "tokio",
+ "tracing",
 ]
 
 [[package]]
 name = "ghost-protocol"
-version = "0.0.8"
+version = "0.0.9"
 dependencies = [
  "blake3",
  "chacha20poly1305",
@@ -2122,7 +2123,7 @@ dependencies = [
 
 [[package]]
 name = "ghost-server"
-version = "0.0.8"
+version = "0.0.9"
 dependencies = [
  "blake3",
  "ciborium",
@@ -2142,7 +2143,7 @@ dependencies = [
 
 [[package]]
 name = "ghost-storage"
-version = "0.0.8"
+version = "0.0.9"
 dependencies = [
  "blake3",
  "ghost-core",
@@ -3512,6 +3513,7 @@ dependencies = [
  "libp2p-autonat",
  "libp2p-connection-limits",
  "libp2p-core",
+ "libp2p-dcutr",
  "libp2p-dns",
  "libp2p-identify",
  "libp2p-identity",
@@ -3519,7 +3521,9 @@ dependencies = [
  "libp2p-mdns",
  "libp2p-metrics",
  "libp2p-noise",
+ "libp2p-ping",
  "libp2p-quic",
+ "libp2p-relay",
  "libp2p-request-response",
  "libp2p-swarm",
  "libp2p-tcp",
@@ -3601,6 +3605,28 @@ dependencies = [
  "thiserror 2.0.18",
  "tracing",
  "unsigned-varint 0.8.0",
+ "web-time",
+]
+
+[[package]]
+name = "libp2p-dcutr"
+version = "0.14.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2b4107305e12158af3e66960b6181789c547394c9c9a8696f721521602bfc73a"
+dependencies = [
+ "asynchronous-codec",
+ "either",
+ "futures",
+ "futures-bounded",
+ "futures-timer",
+ "hashlink 0.10.0",
+ "libp2p-core",
+ "libp2p-identity",
+ "libp2p-swarm",
+ "quick-protobuf",
+ "quick-protobuf-codec",
+ "thiserror 2.0.18",
+ "tracing",
  "web-time",
 ]
 
@@ -3713,9 +3739,12 @@ checksum = "805a555148522cb3414493a5153451910cb1a146c53ffbf4385708349baf62b7"
 dependencies = [
  "futures",
  "libp2p-core",
+ "libp2p-dcutr",
  "libp2p-identify",
  "libp2p-identity",
  "libp2p-kad",
+ "libp2p-ping",
+ "libp2p-relay",
  "libp2p-swarm",
  "pin-project",
  "prometheus-client",
@@ -3746,6 +3775,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "libp2p-ping"
+version = "0.47.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "74bb7fcdfd9fead4144a3859da0b49576f171a8c8c7c0bfc7c541921d25e60d3"
+dependencies = [
+ "futures",
+ "futures-timer",
+ "libp2p-core",
+ "libp2p-identity",
+ "libp2p-swarm",
+ "rand 0.8.6",
+ "tracing",
+ "web-time",
+]
+
+[[package]]
 name = "libp2p-quic"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3765,6 +3810,30 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tracing",
+]
+
+[[package]]
+name = "libp2p-relay"
+version = "0.21.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d8b9b0392ed623243ad298326b9f806d51191829ac7585cc825c54c6c67b04d9"
+dependencies = [
+ "asynchronous-codec",
+ "bytes",
+ "either",
+ "futures",
+ "futures-bounded",
+ "futures-timer",
+ "libp2p-core",
+ "libp2p-identity",
+ "libp2p-swarm",
+ "quick-protobuf",
+ "quick-protobuf-codec",
+ "rand 0.8.6",
+ "static_assertions",
+ "thiserror 2.0.18",
+ "tracing",
+ "web-time",
 ]
 
 [[package]]

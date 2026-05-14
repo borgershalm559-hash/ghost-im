@@ -13,9 +13,9 @@ use ghost_core::GhostId;
 use ghost_identity::IdentityKey;
 use libp2p::{
     core::{transport::ListenerId, ConnectedPoint},
-    identify, kad, request_response,
+    dcutr, identify, kad, noise, request_response,
     swarm::SwarmEvent,
-    Multiaddr, PeerId, Swarm, SwarmBuilder,
+    tcp, yamux, Multiaddr, PeerId, Swarm, SwarmBuilder,
 };
 
 /// Public IPFS Kademlia bootstrap nodes. Ghost reuses these — libp2p Kademlia
@@ -147,12 +147,31 @@ impl Network {
         let kp_clone = kp.clone();
         let mut swarm = SwarmBuilder::with_existing_identity(kp)
             .with_tokio()
+            // TCP transport: needed because libp2p Circuit Relay v2 uses TCP
+            // for the relay protocol. Even with QUIC available, the relay
+            // connection itself runs on TCP+noise+yamux.
+            .with_tcp(
+                tcp::Config::default(),
+                noise::Config::new,
+                yamux::Config::default,
+            )
+            .map_err(|e| NetworkError::Transport(format!("build tcp: {e}")))?
+            // QUIC: primary transport for direct peer↔peer.
             .with_quic()
-            .with_behaviour(|_kp_inner| {
-                // GhostBehaviour::new needs the peer id and the keypair.
-                // We captured kp_clone from the outer scope since _kp_inner
-                // is a shared reference (&Keypair) to the builder's copy.
-                GhostBehaviour::new(local_peer_id, &kp_clone)
+            // DNS resolution: required to resolve /dnsaddr/bootstrap.libp2p.io
+            // bootstrap multiaddrs into concrete ip4/ip6 addresses.
+            .with_dns()
+            .map_err(|e| NetworkError::Transport(format!("build dns: {e}")))?
+            // Relay client transport: hooks into Circuit Relay v2 so we can
+            // both dial through and listen via a relayed circuit address.
+            // The returned `relay_client` handle is consumed inside the
+            // behaviour-builder closure below.
+            .with_relay_client(noise::Config::new, yamux::Config::default)
+            .map_err(|e| NetworkError::Transport(format!("build relay client: {e}")))?
+            .with_behaviour(|_kp_inner, relay_client| {
+                // GhostBehaviour::new needs the peer id, the keypair, and the
+                // relay-client behaviour (consumed from the builder closure).
+                GhostBehaviour::new(local_peer_id, &kp_clone, relay_client)
             })
             .map_err(|e| NetworkError::Transport(format!("build behaviour: {e}")))?
             .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(60)))
@@ -160,12 +179,27 @@ impl Network {
 
         // Bootstrap: add public DHT seed nodes so we can publish/lookup records
         // and find peers we've never directly connected to. AutoNAT will also
-        // use these nodes to probe our external dialability.
+        // use these nodes to probe our external dialability. We additionally
+        // try to listen via each bootstrap peer as a Circuit Relay v2 reservation
+        // — if any of them accept us, we get a `/p2p/<bootstrap>/p2p-circuit`
+        // listen address that peers behind NAT can dial us at.
         for (peer_str, addr_str) in BOOTSTRAP_NODES {
             if let (Ok(peer), Ok(addr)) = (peer_str.parse::<PeerId>(), addr_str.parse::<Multiaddr>())
             {
                 swarm.behaviour_mut().kad.add_address(&peer, addr.clone());
-                swarm.behaviour_mut().autonat.add_server(peer, Some(addr));
+                swarm.behaviour_mut().autonat.add_server(peer, Some(addr.clone()));
+
+                // Best-effort reservation: try to listen via this peer as a
+                // relay. The dnsaddr resolves before the actual reservation
+                // attempt. Failure here is silent — we have AutoNAT/QUIC
+                // hole-punching as additional fallbacks.
+                let circuit: Multiaddr = match format!("{addr_str}/p2p/{peer_str}/p2p-circuit")
+                    .parse()
+                {
+                    Ok(a) => a,
+                    Err(_) => continue,
+                };
+                let _ = swarm.listen_on(circuit);
             }
         }
         // Trigger a Kademlia bootstrap query so the swarm starts populating
@@ -590,6 +624,32 @@ async fn handle_swarm_event(
             // No special handling yet — AutoNAT updates the swarm's
             // external-address bookkeeping internally.
         }
+
+        // ----------------------------------------------------------------
+        // DCUtR: a relayed connection upgraded (or failed to upgrade) to a
+        // direct hole-punched connection. Informational — libp2p switches
+        // the active connection transparently.
+        // ----------------------------------------------------------------
+        SwarmEvent::Behaviour(GhostBehaviourEvent::Dcutr(dcutr::Event {
+            remote_peer_id,
+            result,
+        })) => match result {
+            Ok(_) => tracing::info!(
+                target: "ghost-network",
+                %remote_peer_id,
+                "dcutr: hole-punched direct connection",
+            ),
+            Err(e) => tracing::debug!(
+                target: "ghost-network",
+                %remote_peer_id,
+                "dcutr: hole-punch failed: {e:?}",
+            ),
+        },
+
+        // Relay-client + Ping events are informational; libp2p handles the
+        // internal state. We don't need to react.
+        SwarmEvent::Behaviour(GhostBehaviourEvent::RelayClient(_)) => {}
+        SwarmEvent::Behaviour(GhostBehaviourEvent::Ping(_)) => {}
 
         // All other swarm events (dialling, connection closed, …) are
         // ignored at this level — add arms here as features are added.
